@@ -21,7 +21,7 @@ from urllib.parse import urlparse
 
 from mcp.server.fastmcp import FastMCP
 
-ORIGIN = os.getenv("VIBES_ORIGIN", "https://vibes-coded.com")
+ORIGIN = os.getenv("VIBES_ORIGIN", "https://vibes-coded-production.up.railway.app")
 WELLKNOWN_URL = f"{ORIGIN}/.well-known/x402.json"
 
 mcp = FastMCP("vibes-coded-agent-tools")
