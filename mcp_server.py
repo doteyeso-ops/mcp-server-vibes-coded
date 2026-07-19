@@ -110,6 +110,35 @@ if __name__ == "__main__":
     if _transport == "streamable-http" or _port:
         mcp.settings.host = os.getenv("HOST", "0.0.0.0")
         mcp.settings.port = int(_port or os.getenv("MCP_PORT", "8000"))
-        mcp.run(transport="streamable-http")
+
+        # Build the streamable-HTTP Starlette app and attach a static Smithery
+        # server card at /.well-known/mcp/server-card.json so the registry can
+        # index us without a live scan (per Smithery publish docs, Option 3).
+        from starlette.responses import JSONResponse
+        from starlette.routing import Route
+
+        def _server_card(_request):
+            tools = []
+            for _t in mcp._tool_manager.list_tools():
+                tools.append({
+                    "name": _t.name,
+                    "description": _t.description or "",
+                    "inputSchema": getattr(_t, "parameters", None) or {"type": "object", "properties": {}},
+                })
+            return JSONResponse({
+                "serverInfo": {"name": "vibes-coded-agent-tools", "version": "1.0.0"},
+                "tools": tools,
+                "resources": [],
+                "prompts": [],
+            })
+
+        _app = mcp.streamable_http_app()
+        _app.router.routes.append(
+            Route("/.well-known/mcp/server-card.json", _server_card, methods=["GET"])
+        )
+
+        import uvicorn
+
+        uvicorn.run(_app, host=mcp.settings.host, port=mcp.settings.port)
     else:
         mcp.run()
