@@ -102,4 +102,14 @@ for _res in RESOURCES:
 
 
 if __name__ == "__main__":
-    mcp.run()
+    # Default to stdio for local MCP clients. When PORT is set (e.g. Railway) or
+    # MCP_TRANSPORT=streamable-http, serve over HTTP so Smithery / remote agents
+    # can connect to a hosted endpoint.
+    _transport = os.getenv("MCP_TRANSPORT")
+    _port = os.getenv("PORT")
+    if _transport == "streamable-http" or _port:
+        mcp.settings.host = os.getenv("HOST", "0.0.0.0")
+        mcp.settings.port = int(_port or os.getenv("MCP_PORT", "8000"))
+        mcp.run(transport="streamable-http")
+    else:
+        mcp.run()
