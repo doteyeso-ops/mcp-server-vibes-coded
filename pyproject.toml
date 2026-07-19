@@ -1,0 +1,20 @@
+[project]
+name = "mcp-server-vibes-coded"
+version = "1.0.0"
+description = "MCP server exposing Vibes-Coded's 64 pay-per-call x402 agent-tool endpoints as discoverable MCP tools."
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = ["mcp>=1.26.0"]
+
+[project.scripts]
+mcp-server-vibes-coded = "mcp_server:mcp.run"
+
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools]
+py-modules = ["mcp_server"]
+
+[tool.mcp]
+name = "vibes-coded-agent-tools"
