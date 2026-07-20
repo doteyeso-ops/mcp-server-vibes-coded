@@ -1,7 +1,7 @@
-"""Vibes-Coded MCP server — exposes ALL pay-per-call x402 endpoints (91) as MCP tools.
+"""Vibes-Coded MCP server — exposes ALL pay-per-call x402 endpoints (123) as MCP tools.
 
-Source of truth: the live /.well-known/x402.json discovery doc (71 outcome endpoints
-+ 20 product aliases = 91 callable x402 resources). Agents discover this server on
+Source of truth: the live /.well-known/x402.json discovery doc (93 outcome endpoints
++ 30 product aliases = 123 callable x402 resources). Agents discover this server on
 Glama / Smithery / MCP.so, then call tools that proxy to the resource's real path.
 Free-trial endpoints work with no auth; paid endpoints require the caller to satisfy
 x402 (the server forwards the PAYMENT-SIGNATURE header if the client provides one).
@@ -14,10 +14,13 @@ Publish: smithery publish / glama add-server / mcp.so/submit
 from __future__ import annotations
 
 import json
+import logging
 import os
 import urllib.request
 from typing import Any
 from urllib.parse import urlparse
+
+logger = logging.getLogger("vibes-coded-mcp")
 
 from mcp.server.fastmcp import FastMCP
 
@@ -61,8 +64,14 @@ def _call_resource(path: str, payload: dict, payment_sig: str | None = None) -> 
             return {"error": f"HTTP {e.code}", "detail": raw[:500]}
 
 
-# Build tools dynamically from the live discovery doc (all 91 x402 resources).
-RESOURCES = _fetch_resources()
+# Build tools dynamically from the live discovery doc (all 91+ x402 resources).
+# Resilient: if the catalog fetch fails (e.g. sandboxed inspector with no
+# outbound network), start anyway with whatever registered — never crash at import.
+try:
+    RESOURCES = _fetch_resources()
+except Exception as _e:
+    logger.warning("catalog fetch failed at startup: %s", _e)
+    RESOURCES = []
 _seen = set()
 for _res in RESOURCES:
     _path = _endpoint_path(_res)
