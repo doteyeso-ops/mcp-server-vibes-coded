@@ -149,6 +149,7 @@ if __name__ == "__main__":
 # This tool makes that command REAL: it calls the endpoint, and if a payment is required,
 # returns the exact challenge (payTo / amount / asset / network) plus a copy-paste command.
 # If the agent already settled with its own wallet, pass payment_signature to forward it.
+# Deployed 2026-07-20: previously the `pay` subcommand was a dead CTA on every 402.
 def _slug_to_path(slug: str) -> str | None:
     """Resolve a slug to its call URL using the live discovery doc.
 
