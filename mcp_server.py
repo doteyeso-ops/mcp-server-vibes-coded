@@ -126,7 +126,7 @@ if __name__ == "__main__":
                     "inputSchema": getattr(_t, "parameters", None) or {"type": "object", "properties": {}},
                 })
             return JSONResponse({
-                "serverInfo": {"name": "vibes-coded-agent-tools", "version": "1.0.0"},
+                "serverInfo": {"name": "vibes-coded-agent-tools", "version": "1.0.1"},
                 "tools": tools,
                 "resources": [],
                 "prompts": [],
