@@ -101,55 +101,13 @@ for _res in RESOURCES:
     )
 
 
-if __name__ == "__main__":
-    # Default to stdio for local MCP clients. When PORT is set (e.g. Railway) or
-    # MCP_TRANSPORT=streamable-http, serve over HTTP so Smithery / remote agents
-    # can connect to a hosted endpoint.
-    _transport = os.getenv("MCP_TRANSPORT")
-    _port = os.getenv("PORT")
-    if _transport == "streamable-http" or _port:
-        mcp.settings.host = os.getenv("HOST", "0.0.0.0")
-        mcp.settings.port = int(_port or os.getenv("MCP_PORT", "8000"))
-
-        # Build the streamable-HTTP Starlette app and attach a static Smithery
-        # server card at /.well-known/mcp/server-card.json so the registry can
-        # index us without a live scan (per Smithery publish docs, Option 3).
-        from starlette.responses import JSONResponse
-        from starlette.routing import Route
-
-        def _server_card(_request):
-            tools = []
-            for _t in mcp._tool_manager.list_tools():
-                tools.append({
-                    "name": _t.name,
-                    "description": _t.description or "",
-                    "inputSchema": getattr(_t, "parameters", None) or {"type": "object", "properties": {}},
-                })
-            return JSONResponse({
-                "serverInfo": {"name": "vibes-coded-agent-tools", "version": "1.0.1"},
-                "tools": tools,
-                "resources": [],
-                "prompts": [],
-            })
-
-        _app = mcp.streamable_http_app()
-        _app.router.routes.append(
-            Route("/.well-known/mcp/server-card.json", _server_card, methods=["GET"])
-        )
-
-        import uvicorn
-
-        uvicorn.run(_app, host=mcp.settings.host, port=mcp.settings.port)
-    else:
-        mcp.run()
-
-
 # --- pay tool: closes the x402 loop for agents that hit a 402 ---
 # The backend's 402 response advertises `npx @doteyeso-ops/mcp-server-vibes-coded pay <slug>`.
 # This tool makes that command REAL: it calls the endpoint, and if a payment is required,
 # returns the exact challenge (payTo / amount / asset / network) plus a copy-paste command.
 # If the agent already settled with its own wallet, pass payment_signature to forward it.
 # Deployed 2026-07-20: previously the `pay` subcommand was a dead CTA on every 402.
+# Defined BEFORE the `if __name__` block so it registers before mcp.run()/streamable_http_app().
 def _slug_to_path(slug: str) -> str | None:
     """Resolve a slug to its call URL using the live discovery doc.
 
@@ -219,4 +177,47 @@ def pay(slug: str, payment_signature: str | None = None, **kwargs: Any) -> str:
         }
         return json.dumps(out, indent=2, default=str)
     return json.dumps(result, indent=2, default=str)
+
+
+if __name__ == "__main__":
+    # Default to stdio for local MCP clients. When PORT is set (e.g. Railway) or
+    # MCP_TRANSPORT=streamable-http, serve over HTTP so Smithery / remote agents
+    # can connect to a hosted endpoint.
+    _transport = os.getenv("MCP_TRANSPORT")
+    _port = os.getenv("PORT")
+    if _transport == "streamable-http" or _port:
+        mcp.settings.host = os.getenv("HOST", "0.0.0.0")
+        mcp.settings.port = int(_port or os.getenv("MCP_PORT", "8000"))
+
+        # Build the streamable-HTTP Starlette app and attach a static Smithery
+        # server card at /.well-known/mcp/server-card.json so the registry can
+        # index us without a live scan (per Smithery publish docs, Option 3).
+        from starlette.responses import JSONResponse
+        from starlette.routing import Route
+
+        def _server_card(_request):
+            tools = []
+            for _t in mcp._tool_manager.list_tools():
+                tools.append({
+                    "name": _t.name,
+                    "description": _t.description or "",
+                    "inputSchema": getattr(_t, "parameters", None) or {"type": "object", "properties": {}},
+                })
+            return JSONResponse({
+                "serverInfo": {"name": "vibes-coded-agent-tools", "version": "1.0.1"},
+                "tools": tools,
+                "resources": [],
+                "prompts": [],
+            })
+
+        _app = mcp.streamable_http_app()
+        _app.router.routes.append(
+            Route("/.well-known/mcp/server-card.json", _server_card, methods=["GET"])
+        )
+
+        import uvicorn
+
+        uvicorn.run(_app, host=mcp.settings.host, port=mcp.settings.port)
+    else:
+        mcp.run()
 
