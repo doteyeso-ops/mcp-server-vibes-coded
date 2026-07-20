@@ -44,7 +44,7 @@ def _endpoint_path(res: dict) -> str:
 
 
 def _call_resource(path: str, payload: dict, payment_sig: str | None = None) -> dict:
-    url = f"{ORIGIN}{path}"
+    url = path if path.startswith("http") else f"{ORIGIN}{path}"
     body = json.dumps(payload or {}).encode()
     headers = {"Content-Type": "application/json", "User-Agent": "vibes-coded-mcp/1.0"}
     if payment_sig:
@@ -142,3 +142,80 @@ if __name__ == "__main__":
         uvicorn.run(_app, host=mcp.settings.host, port=mcp.settings.port)
     else:
         mcp.run()
+
+
+# --- pay tool: closes the x402 loop for agents that hit a 402 ---
+# The backend's 402 response advertises `npx @doteyeso-ops/mcp-server-vibes-coded pay <slug>`.
+# This tool makes that command REAL: it calls the endpoint, and if a payment is required,
+# returns the exact challenge (payTo / amount / asset / network) plus a copy-paste command.
+# If the agent already settled with its own wallet, pass payment_signature to forward it.
+def _slug_to_path(slug: str) -> str | None:
+    """Resolve a slug to its call URL using the live discovery doc.
+
+    The doc keys endpoints by `x-canonical-slug` (fallback `slug`) and carries the
+    real endpoint in `url`. Return the full URL so we call the exact path.
+    """
+    for _r in RESOURCES:
+        _doc_slug = _r.get("x-canonical-slug") or _r.get("slug") or ""
+        if _doc_slug == slug:
+            return _r.get("url") or _endpoint_path(_r)
+    # fallback: canonical outcome path (all outcome endpoints live here)
+    return f"{ORIGIN}/api/v1/outcomes/{slug}"
+
+
+@mcp.tool()
+def pay(slug: str, payment_signature: str | None = None, **kwargs: Any) -> str:
+    """Pay for and call a Vibes-Coded x402 endpoint.
+
+    Args:
+        slug: the endpoint slug, e.g. "web-search" or "crypto-price-batch".
+        payment_signature: optional x402 PAYMENT-SIGNATURE from your own wallet.
+            If provided, it is forwarded and the result is returned directly.
+        **kwargs: the endpoint's input fields (e.g. query=..., symbols=[...]).
+
+    If no payment_signature is given and the endpoint requires payment, this returns
+    the exact 402 challenge (payTo, amount, asset, network) and a one-line command
+    so your x402 client / wallet can settle, then re-call with the signature.
+    """
+    path = _slug_to_path(slug)
+    if not path:
+        try:
+            for _r in _fetch_resources():
+                if (_r.get("slug") or "") == slug:
+                    path = _endpoint_path(_r)
+                    break
+        except Exception:
+            pass
+    if not path:
+        return json.dumps({"error": f"Unknown slug '{slug}'. List tools with vc_* prefix."}, indent=2)
+    if payment_signature:
+        result = _call_resource(path, kwargs, payment_sig=payment_signature)
+        return json.dumps(result, indent=2, default=str)
+    # no signature -> call, capture 402 challenge
+    result = _call_resource(path, kwargs)
+    if isinstance(result, dict) and result.get("x402Version") is not None:
+        accepts = (result.get("accepts") or [{}])[0] if result.get("accepts") else {}
+        req = accepts.get("requiredPayment") or accepts  # x402 v2 nests under requiredPayment
+        pay_to = req.get("payTo") or accepts.get("payTo")
+        amount = req.get("amount") or req.get("maxAmountRequired")
+        asset = req.get("asset")
+        network = req.get("network")
+        cmd = (
+            f"# Settle with your x402 wallet, then re-call with the PAYMENT-SIGNATURE:\n"
+            f"# payTo={pay_to} amount={amount} asset={asset} network={network}\n"
+            f"npx -y @doteyeso-ops/mcp-server-vibes-coded   # then call pay(slug='{slug}', "
+            f"payment_signature=<your-proof>, **inputs)"
+        )
+        out = {
+            "payment_required": True,
+            "x402Version": result.get("x402Version"),
+            "pay_to": pay_to,
+            "amount": amount,
+            "asset": asset,
+            "network": network,
+            "pay_command": cmd,
+            "raw_challenge": result,
+        }
+        return json.dumps(out, indent=2, default=str)
+    return json.dumps(result, indent=2, default=str)
+
