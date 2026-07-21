@@ -27,7 +27,7 @@ from mcp.server.fastmcp import FastMCP
 
 ORIGIN = os.getenv("VIBES_ORIGIN", "https://vibes-coded-production.up.railway.app").rstrip("/")
 WELLKNOWN_URL = f"{ORIGIN}/.well-known/x402.json"
-VERSION = "1.0.3"
+VERSION = "1.0.2"
 
 mcp = FastMCP("vibes-coded-agent-tools")
 
