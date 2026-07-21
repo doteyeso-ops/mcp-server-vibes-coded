@@ -1,0 +1,10 @@
+LICENSE
+README.md
+mcp_server.py
+pyproject.toml
+mcp_server_vibes_coded.egg-info/PKG-INFO
+mcp_server_vibes_coded.egg-info/SOURCES.txt
+mcp_server_vibes_coded.egg-info/dependency_links.txt
+mcp_server_vibes_coded.egg-info/entry_points.txt
+mcp_server_vibes_coded.egg-info/requires.txt
+mcp_server_vibes_coded.egg-info/top_level.txt

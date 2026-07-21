@@ -1,17 +1,17 @@
 {
   "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
   "name": "io.github.doteyeso-ops/mcp-server-vibes-coded",
-  "description": "Vibes-Coded x402 agent tools MCP: reliability guards, pay tool, day-pass.",
+  "description": "Vibes-Coded x402 agent tools MCP: reliability guards, pay tool, day-pass, prepaid.",
   "repository": {
     "url": "https://github.com/doteyeso-ops/mcp-server-vibes-coded",
     "source": "github"
   },
-  "version": "1.0.1",
+  "version": "1.0.2",
   "packages": [
     {
       "registryType": "pypi",
       "identifier": "mcp-server-vibes-coded",
-      "version": "1.0.1",
+      "version": "1.0.2",
       "transport": {
         "type": "stdio"
       }

@@ -1,41 +1,54 @@
-"""Vibes-Coded MCP server — exposes ALL pay-per-call x402 endpoints (123) as MCP tools.
+"""Vibes-Coded MCP server — exposes pay-per-call x402 endpoints as MCP tools.
 
-Source of truth: the live /.well-known/x402.json discovery doc (93 outcome endpoints
-+ 30 product aliases = 123 callable x402 resources). Agents discover this server on
-Glama / Smithery / MCP.so, then call tools that proxy to the resource's real path.
-Free-trial endpoints work with no auth; paid endpoints require the caller to satisfy
-x402 (the server forwards the PAYMENT-SIGNATURE header if the client provides one).
-This server is purely a discovery + proxy wrapper — payments settle on Vibes-Coded's
-side via the CDP facilitator.
+Source of truth: live /.well-known/x402.json. Agents discover this server on
+Glama / Smithery / MCP Registry, then call tools that proxy to Vibes-Coded.
 
-Run:  python mcp_server.py   (serves stdio MCP)
-Publish: smithery publish / glama add-server / mcp.so/submit
+Run (stdio):  python mcp_server.py
+Hosted HTTP:  MCP_TRANSPORT=streamable-http PORT=3000 python mcp_server.py
 """
 from __future__ import annotations
 
 import json
 import logging
 import os
+import urllib.error
 import urllib.request
 from typing import Any
 from urllib.parse import urlparse
 
 logger = logging.getLogger("vibes-coded-mcp")
+logging.basicConfig(level=logging.INFO)
 
 from mcp.server.fastmcp import FastMCP
 
-ORIGIN = os.getenv("VIBES_ORIGIN", "https://vibes-coded-production.up.railway.app")
+ORIGIN = os.getenv("VIBES_ORIGIN", "https://vibes-coded-production.up.railway.app").rstrip("/")
 WELLKNOWN_URL = f"{ORIGIN}/.well-known/x402.json"
+VERSION = "1.0.2"
 
 mcp = FastMCP("vibes-coded-agent-tools")
+
+# Minimal tools always registered so Glama/Smithery inspectors never see an empty
+# tool list when the catalog fetch is blocked/slow at cold start.
+_FALLBACK_SLUGS = (
+    "agent-state-guard",
+    "idempotency-guard",
+    "drift-guard",
+    "retry-storm-guard",
+    "json-repair",
+    "web-search",
+    "page-markdown",
+)
 
 
 def _fetch_resources() -> list[dict]:
     """Fetch all x402 resources from the live discovery doc."""
-    req = urllib.request.Request(WELLKNOWN_URL, headers={"User-Agent": "vibes-coded-mcp/1.0"})
-    with urllib.request.urlopen(req, timeout=30) as r:
+    req = urllib.request.Request(
+        WELLKNOWN_URL,
+        headers={"User-Agent": f"vibes-coded-mcp/{VERSION}"},
+    )
+    with urllib.request.urlopen(req, timeout=20) as r:
         data = json.loads(r.read().decode())
-    return data.get("resources", [])
+    return data.get("resources", []) or []
 
 
 def _endpoint_path(res: dict) -> str:
@@ -49,7 +62,10 @@ def _endpoint_path(res: dict) -> str:
 def _call_resource(path: str, payload: dict, payment_sig: str | None = None) -> dict:
     url = path if path.startswith("http") else f"{ORIGIN}{path}"
     body = json.dumps(payload or {}).encode()
-    headers = {"Content-Type": "application/json", "User-Agent": "vibes-coded-mcp/1.0"}
+    headers = {
+        "Content-Type": "application/json",
+        "User-Agent": f"vibes-coded-mcp/{VERSION}",
+    }
     if payment_sig:
         headers["PAYMENT-SIGNATURE"] = payment_sig
     req = urllib.request.Request(url, data=body, headers=headers, method="POST")
@@ -64,70 +80,66 @@ def _call_resource(path: str, payload: dict, payment_sig: str | None = None) -> 
             return {"error": f"HTTP {e.code}", "detail": raw[:500]}
 
 
-# Build tools dynamically from the live discovery doc (all 91+ x402 resources).
-# Resilient: if the catalog fetch fails (e.g. sandboxed inspector with no
-# outbound network), start anyway with whatever registered — never crash at import.
+def _register_slug_tool(slug: str, path: str, title: str, desc: str, price_str: str) -> None:
+    name = f"vc_{slug.replace('-', '_').replace('/', '_')}"
+    if any(t.name == name for t in mcp._tool_manager.list_tools()):
+        return
+    doc = f"{title} ({price_str} USDC via x402). {desc}  [calls {path}]"
+
+    def _make_handler(p: str):
+        def _handler(**kwargs: Any) -> str:
+            payload = {k: v for k, v in kwargs.items() if v is not None}
+            result = _call_resource(p, payload)
+            return json.dumps(result, indent=2, default=str)
+
+        return _handler
+
+    fn = _make_handler(path)
+    fn.__name__ = name
+    fn.__doc__ = doc
+    mcp.add_tool(fn, name=name, description=doc)
+
+
+# Build tools from live discovery; never crash at import (Glama Docker inspectors).
 try:
     RESOURCES = _fetch_resources()
+    logger.info("catalog loaded: %s resources", len(RESOURCES))
 except Exception as _e:
     logger.warning("catalog fetch failed at startup: %s", _e)
     RESOURCES = []
-_seen = set()
+
+_seen_paths: set[str] = set()
 for _res in RESOURCES:
     _path = _endpoint_path(_res)
-    if not _path:
+    if not _path or _path in _seen_paths:
         continue
-    # dedupe by path
-    if _path in _seen:
-        continue
-    _seen.add(_path)
-
-    _slug = _res.get("slug") or _path.strip("/").replace("/", "_")
+    _seen_paths.add(_path)
+    _slug = _res.get("slug") or _res.get("x-canonical-slug") or _path.strip("/").replace("/", "_")
     _title = _res.get("title") or _res.get("name") or _slug
-    _desc = _res.get("description", "")
+    _desc = _res.get("description") or ""
     _price = _res.get("price_usd", _res.get("price_cents", "0"))
-    _price_str = f"${float(_price)/100:.2f}" if isinstance(_price, (int, float)) else str(_price)
-    _props = (_res.get("input_schema") or {}).get("properties", {})
-    _doc = f"{_title} ({_price_str} USDC via x402). {_desc}  [calls {_path}]"
+    if isinstance(_price, (int, float)) and _price > 5:
+        _price_str = f"${float(_price) / 100:.2f}"
+    else:
+        _price_str = f"${_price}" if not str(_price).startswith("$") else str(_price)
+    _register_slug_tool(str(_slug), _path, str(_title), str(_desc), _price_str)
 
-    _param_names = list(_props.keys())
-
-    def _make_handler(path: str, params: list[str]):
-        def _handler(**kwargs: Any) -> str:
-            payload = {k: v for k, v in kwargs.items() if v is not None}
-            result = _call_resource(path, payload)
-            return json.dumps(result, indent=2, default=str)
-        return _handler
-
-    _fn = _make_handler(_path, _param_names)
-    _fn.__name__ = f"vc_{_slug.replace('-', '_').replace('/', '_')}"
-    _fn.__doc__ = _doc
-
-    mcp.add_tool(
-        _fn,
-        name=f"vc_{_slug.replace('-', '_').replace('/', '_')}",
-        description=_doc,
+# Guarantee a non-empty tool surface for inspectors even if catalog was empty.
+for _slug in _FALLBACK_SLUGS:
+    _register_slug_tool(
+        _slug,
+        f"/api/v1/outcomes/{_slug}",
+        _slug,
+        "Vibes-Coded outcome API (fallback registration).",
+        "varies",
     )
 
 
-# --- pay tool: closes the x402 loop for agents that hit a 402 ---
-# The backend's 402 response advertises `npx @doteyeso-ops/mcp-server-vibes-coded pay <slug>`.
-# This tool makes that command REAL: it calls the endpoint, and if a payment is required,
-# returns the exact challenge (payTo / amount / asset / network) plus a copy-paste command.
-# If the agent already settled with its own wallet, pass payment_signature to forward it.
-# Deployed 2026-07-20: previously the `pay` subcommand was a dead CTA on every 402.
-# Defined BEFORE the `if __name__` block so it registers before mcp.run()/streamable_http_app().
 def _slug_to_path(slug: str) -> str | None:
-    """Resolve a slug to its call URL using the live discovery doc.
-
-    The doc keys endpoints by `x-canonical-slug` (fallback `slug`) and carries the
-    real endpoint in `url`. Return the full URL so we call the exact path.
-    """
     for _r in RESOURCES:
         _doc_slug = _r.get("x-canonical-slug") or _r.get("slug") or ""
         if _doc_slug == slug:
             return _r.get("url") or _endpoint_path(_r)
-    # fallback: canonical outcome path (all outcome endpoints live here)
     return f"{ORIGIN}/api/v1/outcomes/{slug}"
 
 
@@ -136,44 +148,26 @@ def pay(slug: str, payment_signature: str | None = None, **kwargs: Any) -> str:
     """Pay for and call a Vibes-Coded x402 endpoint.
 
     Args:
-        slug: the endpoint slug, e.g. "web-search" or "crypto-price-batch".
-        payment_signature: optional x402 PAYMENT-SIGNATURE from your own wallet.
-            If provided, it is forwarded and the result is returned directly.
-        **kwargs: the endpoint's input fields (e.g. query=..., symbols=[...]).
+        slug: endpoint slug, e.g. "web-search" or "agent-state-guard".
+        payment_signature: optional x402 PAYMENT-SIGNATURE from your wallet.
+        **kwargs: endpoint input fields.
 
-    If no payment_signature is given and the endpoint requires payment, this returns
-    the exact 402 challenge (payTo, amount, asset, network) and a one-line command
-    so your x402 client / wallet can settle, then re-call with the signature.
+    Prefer prepaid X-Vibes-Key or a 24h day-pass over per-call signing when possible.
     """
     path = _slug_to_path(slug)
     if not path:
-        try:
-            for _r in _fetch_resources():
-                if (_r.get("slug") or "") == slug:
-                    path = _endpoint_path(_r)
-                    break
-        except Exception:
-            pass
-    if not path:
-        return json.dumps({"error": f"Unknown slug '{slug}'. List tools with vc_* prefix."}, indent=2)
+        return json.dumps({"error": f"Unknown slug '{slug}'."}, indent=2)
     if payment_signature:
         result = _call_resource(path, kwargs, payment_sig=payment_signature)
         return json.dumps(result, indent=2, default=str)
-    # no signature -> call, capture 402 challenge
     result = _call_resource(path, kwargs)
     if isinstance(result, dict) and result.get("x402Version") is not None:
         accepts = (result.get("accepts") or [{}])[0] if result.get("accepts") else {}
-        req = accepts.get("requiredPayment") or accepts  # x402 v2 nests under requiredPayment
+        req = accepts.get("requiredPayment") or accepts
         pay_to = req.get("payTo") or accepts.get("payTo")
         amount = req.get("amount") or req.get("maxAmountRequired")
         asset = req.get("asset")
         network = req.get("network")
-        cmd = (
-            f"# Settle with your x402 wallet, then re-call with the PAYMENT-SIGNATURE:\n"
-            f"# payTo={pay_to} amount={amount} asset={asset} network={network}\n"
-            f"npx -y @doteyeso-ops/mcp-server-vibes-coded   # then call pay(slug='{slug}', "
-            f"payment_signature=<your-proof>, **inputs)"
-        )
         out = {
             "payment_required": True,
             "x402Version": result.get("x402Version"),
@@ -181,52 +175,107 @@ def pay(slug: str, payment_signature: str | None = None, **kwargs: Any) -> str:
             "amount": amount,
             "asset": asset,
             "network": network,
-            "pay_command": cmd,
+            "preferred": {
+                "prepaid_fund": f"{ORIGIN}/api/v1/outcomes/balance/fund",
+                "day_pass": f"{ORIGIN}/api/v1/outcomes/day-pass",
+                "header_prepaid": "X-Vibes-Key",
+                "header_day_pass": "X-Day-Pass",
+            },
+            "example_calls": result.get("example_calls"),
             "raw_challenge": result,
+            "note": (
+                "No npm package — use pip install mcp-server-vibes-coded, "
+                "or settle PAYMENT-SIGNATURE / prepaid / day-pass."
+            ),
         }
         return json.dumps(out, indent=2, default=str)
     return json.dumps(result, indent=2, default=str)
 
 
-if __name__ == "__main__":
-    # Default to stdio for local MCP clients. When PORT is set (e.g. Railway) or
-    # MCP_TRANSPORT=streamable-http, serve over HTTP so Smithery / remote agents
-    # can connect to a hosted endpoint.
-    _transport = os.getenv("MCP_TRANSPORT")
-    _port = os.getenv("PORT")
-    if _transport == "streamable-http" or _port:
-        mcp.settings.host = os.getenv("HOST", "0.0.0.0")
-        mcp.settings.port = int(_port or os.getenv("MCP_PORT", "8000"))
+@mcp.tool()
+def health() -> str:
+    """Liveness check for hosted inspectors (Glama / Smithery)."""
+    return json.dumps(
+        {
+            "ok": True,
+            "service": "mcp-server-vibes-coded",
+            "version": VERSION,
+            "origin": ORIGIN,
+            "tools": len(mcp._tool_manager.list_tools()),
+            "catalog_resources": len(RESOURCES),
+        },
+        indent=2,
+    )
 
-        # Build the streamable-HTTP Starlette app and attach a static Smithery
-        # server card at /.well-known/mcp/server-card.json so the registry can
-        # index us without a live scan (per Smithery publish docs, Option 3).
-        from starlette.responses import JSONResponse
-        from starlette.routing import Route
 
-        def _server_card(_request):
-            tools = []
-            for _t in mcp._tool_manager.list_tools():
-                tools.append({
+def _attach_http_routes(app) -> None:
+    """Health + MCP server card for Glama/Smithery Docker verification."""
+    from starlette.responses import JSONResponse, PlainTextResponse
+    from starlette.routing import Route
+
+    def _health(_request):
+        return JSONResponse(
+            {
+                "ok": True,
+                "service": "mcp-server-vibes-coded",
+                "version": VERSION,
+                "tools": len(mcp._tool_manager.list_tools()),
+            }
+        )
+
+    def _ready(_request):
+        return PlainTextResponse("ok\n", status_code=200)
+
+    def _server_card(_request):
+        tools = []
+        for _t in mcp._tool_manager.list_tools():
+            tools.append(
+                {
                     "name": _t.name,
                     "description": _t.description or "",
-                    "inputSchema": getattr(_t, "parameters", None) or {"type": "object", "properties": {}},
-                })
-            return JSONResponse({
-                "serverInfo": {"name": "vibes-coded-agent-tools", "version": "1.0.1"},
+                    "inputSchema": getattr(_t, "parameters", None)
+                    or {"type": "object", "properties": {}},
+                }
+            )
+        return JSONResponse(
+            {
+                "serverInfo": {"name": "vibes-coded-agent-tools", "version": VERSION},
                 "tools": tools,
                 "resources": [],
                 "prompts": [],
-            })
-
-        _app = mcp.streamable_http_app()
-        _app.router.routes.append(
-            Route("/.well-known/mcp/server-card.json", _server_card, methods=["GET"])
+            }
         )
 
+    for path, handler in (
+        ("/health", _health),
+        ("/healthz", _ready),
+        ("/", _ready),
+        ("/.well-known/mcp/server-card.json", _server_card),
+    ):
+        app.router.routes.insert(0, Route(path, handler, methods=["GET"]))
+
+
+def main() -> None:
+    """CLI entrypoint used by pyproject [project.scripts] and Docker."""
+    transport = os.getenv("MCP_TRANSPORT")
+    port = os.getenv("PORT")
+    if transport == "streamable-http" or port:
+        mcp.settings.host = os.getenv("HOST", "0.0.0.0")
+        mcp.settings.port = int(port or os.getenv("MCP_PORT", "3000"))
+        app = mcp.streamable_http_app()
+        _attach_http_routes(app)
         import uvicorn
 
-        uvicorn.run(_app, host=mcp.settings.host, port=mcp.settings.port)
+        logger.info(
+            "starting streamable-http on %s:%s (%s tools)",
+            mcp.settings.host,
+            mcp.settings.port,
+            len(mcp._tool_manager.list_tools()),
+        )
+        uvicorn.run(app, host=mcp.settings.host, port=mcp.settings.port)
     else:
         mcp.run()
 
+
+if __name__ == "__main__":
+    main()

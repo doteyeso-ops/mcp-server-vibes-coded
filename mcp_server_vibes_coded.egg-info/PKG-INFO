@@ -1,3 +1,22 @@
+Metadata-Version: 2.4
+Name: mcp-server-vibes-coded
+Version: 1.0.2
+Summary: MCP server exposing Vibes-Coded pay-per-call x402 agent-tool endpoints as discoverable MCP tools.
+Author: doteyeso-ops
+License: MIT
+Project-URL: Homepage, https://vibes-coded.com
+Project-URL: Repository, https://github.com/doteyeso-ops/mcp-server-vibes-coded
+Project-URL: Documentation, https://vibes-coded.com/llms.txt
+Keywords: mcp,x402,agents,solana,vibes-coded
+Requires-Python: >=3.10
+Description-Content-Type: text/markdown
+License-File: LICENSE
+Requires-Dist: mcp>=1.26.0
+Requires-Dist: httpx>=0.27.0
+Requires-Dist: uvicorn[standard]>=0.30.0
+Requires-Dist: starlette>=0.38.0
+Dynamic: license-file
+
 <!-- mcp-name: io.github.doteyeso-ops/mcp-server-vibes-coded -->
 
 # mcp-server-vibes-coded
