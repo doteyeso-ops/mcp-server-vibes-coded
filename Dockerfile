@@ -2,7 +2,7 @@ FROM python:3.11-slim
 
 WORKDIR /app
 
-# curl for HEALTHCHECK (Glama / registry probes)
+# Optional curl for HTTP-mode probes (Smithery / self-host). Glama generates its own image.
 RUN apt-get update && apt-get install -y --no-install-recommends curl \
   && rm -rf /var/lib/apt/lists/*
 
@@ -12,14 +12,16 @@ RUN python -m pip install --no-cache-dir --upgrade pip \
 
 COPY mcp_server.py pyproject.toml README.md LICENSE ./
 
+# Official MCP Registry ownership marker for OCI packages
+LABEL io.modelcontextprotocol.server.name="io.github.doteyeso-ops/mcp-server-vibes-coded"
+LABEL org.opencontainers.image.source="https://github.com/doteyeso-ops/mcp-server-vibes-coded"
+LABEL org.opencontainers.image.description="Vibes-Coded x402 agent tools MCP server"
+
 ENV VIBES_ORIGIN=https://vibes-coded-production.up.railway.app
-# Hosted inspectors (Glama/Smithery) need streamable-HTTP, not stdio.
-ENV MCP_TRANSPORT=streamable-http
+# Default: stdio (MCP Registry OCI + Glama mcp-proxy). For HTTP inspectors set:
+#   MCP_TRANSPORT=streamable-http PORT=3000
 ENV HOST=0.0.0.0
-ENV PORT=3000
 EXPOSE 3000
 
-HEALTHCHECK --interval=15s --timeout=5s --start-period=40s --retries=5 \
-  CMD curl -fsS http://127.0.0.1:3000/healthz || exit 1
-
+# Stdio by default — do not force MCP_TRANSPORT/PORT here (breaks Glama verify).
 ENTRYPOINT ["python", "mcp_server.py"]

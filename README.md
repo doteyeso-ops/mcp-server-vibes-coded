@@ -26,18 +26,27 @@ There is **no npm package**. Do not `npx @doteyeso-ops/mcp-server-vibes-coded`.
 
 ## Hosted / Docker (Glama, Smithery)
 
+Default (stdio — local clients, MCP Registry OCI, Glama `mcp-proxy`):
+
+```bash
+python mcp_server.py
+# or: docker run -i --rm ghcr.io/doteyeso-ops/mcp-server-vibes-coded:1.0.2
+```
+
+HTTP mode (Smithery / inspectors):
+
 ```bash
 PORT=3000 MCP_TRANSPORT=streamable-http python mcp_server.py
 # health: GET /health  GET /healthz
 ```
 
-Dockerfile in this repo listens on **3000** with streamable-HTTP + health checks.
+Glama release steps: see [`GLAMA_RELEASE.md`](GLAMA_RELEASE.md) (Glama generates its own image; use stdio CMD, not HTTP).
 
 Env:
 
 - `VIBES_ORIGIN` — API base (default production Railway URL that bypasses Cloudflare)
-- `MCP_TRANSPORT=streamable-http` — required for hosted inspectors
-- `PORT` / `HOST`
+- `MCP_TRANSPORT=streamable-http` + `PORT` — optional HTTP mode for hosted inspectors
+- `HOST` (HTTP mode only)
 
 ## Payment
 

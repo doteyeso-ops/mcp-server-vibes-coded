@@ -9,12 +9,35 @@
   "version": "1.0.2",
   "packages": [
     {
+      "registryType": "oci",
+      "identifier": "ghcr.io/doteyeso-ops/mcp-server-vibes-coded:1.0.2",
+      "transport": {
+        "type": "stdio"
+      },
+      "environmentVariables": [
+        {
+          "name": "VIBES_ORIGIN",
+          "description": "Vibes-Coded API origin (defaults to production Railway).",
+          "isRequired": false,
+          "format": "string"
+        }
+      ]
+    },
+    {
       "registryType": "pypi",
       "identifier": "mcp-server-vibes-coded",
       "version": "1.0.2",
       "transport": {
         "type": "stdio"
-      }
+      },
+      "environmentVariables": [
+        {
+          "name": "VIBES_ORIGIN",
+          "description": "Vibes-Coded API origin (defaults to production Railway).",
+          "isRequired": false,
+          "format": "string"
+        }
+      ]
     }
   ]
 }

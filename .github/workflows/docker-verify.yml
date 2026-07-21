@@ -1,0 +1,38 @@
+name: Docker verify
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+      - name: Build image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: false
+          load: true
+          tags: mcp-server-vibes-coded:test
+      - name: Label + tool surface
+        run: |
+          set -euo pipefail
+          docker inspect mcp-server-vibes-coded:test --format '{{index .Config.Labels "io.modelcontextprotocol.server.name"}}' | grep -F 'io.github.doteyeso-ops/mcp-server-vibes-coded'
+          docker run --rm mcp-server-vibes-coded:test python -c "import mcp_server as m; n=len(m.mcp._tool_manager.list_tools()); print('tools', n); assert n>=5"
+      - name: HTTP health (hosted mode)
+        run: |
+          set -euo pipefail
+          docker run -d --name vc-http -e MCP_TRANSPORT=streamable-http -e PORT=3000 -p 3000:3000 mcp-server-vibes-coded:test
+          for i in $(seq 1 40); do
+            if curl -fsS http://127.0.0.1:3000/healthz; then break; fi
+            sleep 2
+          done
+          curl -fsS http://127.0.0.1:3000/health | tee /tmp/health.json
+          python3 -c "import json; d=json.load(open('/tmp/health.json')); assert d.get('ok') and d.get('tools',0)>=5, d"
+          docker rm -f vc-http

@@ -1,23 +1,4 @@
 {
-  "schemaVersion": "1.0",
-  "server": {
-    "name": "mcp-server-vibes-coded",
-    "displayName": "Vibes-Coded Agent Tools",
-    "description": "MCP server exposing Vibes-Coded's pay-per-call x402 agent-tool endpoints (agent-reliability guards, memory integrity, cost control, supply-chain trust, and utilities) as discoverable MCP tools. Agents discover tools here, then call them; paid calls settle USDC via x402 (OpenX402 / Solana).",
-    "version": "1.0.2",
-    "license": "MIT",
-    "homepage": "https://vibes-coded.com",
-    "repository": "https://github.com/doteyeso-ops/mcp-server-vibes-coded",
-    "documentation": "https://vibes-coded.com/llms.txt",
-    "category": "developer-tools",
-    "tags": [
-      "x402",
-      "pay-per-call",
-      "agents",
-      "solana",
-      "usdc",
-      "reliability",
-      "agent-tools"
-    ]
-  }
+  "$schema": "https://glama.ai/mcp/schemas/server.json",
+  "maintainers": ["doteyeso-ops"]
 }
