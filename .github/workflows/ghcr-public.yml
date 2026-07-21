@@ -2,9 +2,6 @@
 
 on:
   workflow_dispatch:
-  workflow_run:
-    workflows: ["Publish MCP (OCI + Registry)"]
-    types: [completed]
 
 permissions:
   packages: write
@@ -14,30 +11,20 @@ jobs:
   public:
     runs-on: ubuntu-latest
     steps:
-      - name: List + set package visibility public
+      - name: Set GHCR package visibility public
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PACKAGE: mcp-server-vibes-coded
         run: |
           set -euo pipefail
-          OWNER="${GITHUB_REPOSITORY_OWNER}"
-          echo "== list user packages =="
-          curl -sS -H "Accept: application/vnd.github+json" \
-            -H "Authorization: Bearer ${GH_TOKEN}" \
-            "https://api.github.com/users/${OWNER}/packages?package_type=container" | tee /tmp/pkgs.json | head -c 2000
-          echo
-          # Try common name variants
-          for PKG in mcp-server-vibes-coded mcp-server-vibes-coded%2Fmcp-server-vibes-coded; do
-            echo "== try $PKG =="
-            code=$(curl -sS -o /tmp/out.json -w "%{http_code}" \
-              -X PUT \
-              -H "Accept: application/vnd.github+json" \
-              -H "Authorization: Bearer ${GH_TOKEN}" \
-              -H "X-GitHub-Api-Version: 2022-11-28" \
-              "https://api.github.com/users/${OWNER}/packages/container/${PKG}/visibility" \
-              -d '{"visibility":"public"}' || true)
-            echo "HTTP $code"; cat /tmp/out.json; echo
-          done
-          # Also try via repo-linked package API if present
-          curl -sS -H "Accept: application/vnd.github+json" \
-            -H "Authorization: Bearer ${GH_TOKEN}" \
-            "https://api.github.com/user/packages?package_type=container" | head -c 2000 || true
+          owner_type="$(gh api "/users/${GITHUB_REPOSITORY_OWNER}" --jq .type)"
+          if [[ "${owner_type}" == "Organization" ]]; then
+            pkg="/orgs/${GITHUB_REPOSITORY_OWNER}/packages/container/${PACKAGE}"
+          else
+            pkg="/user/packages/container/${PACKAGE}"
+          fi
+          echo "Using ${pkg}"
+          gh api -H "Accept: application/vnd.github+json" "${pkg}" --jq '{name,visibility,html_url}'
+          gh api --method PATCH -H "Accept: application/vnd.github+json" \
+            "${pkg}/visibility" -f visibility=public
+          gh api -H "Accept: application/vnd.github+json" "${pkg}" --jq .visibility
