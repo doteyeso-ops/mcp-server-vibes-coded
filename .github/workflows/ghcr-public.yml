@@ -24,7 +24,14 @@ jobs:
             pkg="/user/packages/container/${PACKAGE}"
           fi
           echo "Using ${pkg}"
-          gh api -H "Accept: application/vnd.github+json" "${pkg}" --jq '{name,visibility,html_url}'
-          gh api --method PATCH -H "Accept: application/vnd.github+json" \
-            "${pkg}/visibility" -f visibility=public
-          gh api -H "Accept: application/vnd.github+json" "${pkg}" --jq .visibility
+          vis="$(gh api -H "Accept: application/vnd.github+json" "${pkg}" --jq .visibility)"
+          echo "current visibility=${vis}"
+          if [[ "${vis}" != "public" ]]; then
+            gh api --method PATCH -H "Accept: application/vnd.github+json" \
+              "${pkg}/visibility" -f visibility=public || \
+            gh api --method PATCH -H "Accept: application/vnd.github+json" \
+              "${pkg}" -f visibility=public
+            vis="$(gh api -H "Accept: application/vnd.github+json" "${pkg}" --jq .visibility)"
+          fi
+          echo "final visibility=${vis}"
+          [[ "${vis}" == "public" ]]
