@@ -1,6 +1,6 @@
 mcp-name: io.github.doteyeso-ops/mcp-server-vibes-coded
 
-﻿# mcp-server-vibes-coded
+# mcp-server-vibes-coded
 
 MCP server that exposes **Vibes-Coded's 93 pay-per-call x402 agent-tool endpoints** as
 discoverable MCP tools. Agents find this server on Glama / Smithery / MCP.so, then call
