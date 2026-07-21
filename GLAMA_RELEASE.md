@@ -21,12 +21,18 @@ Open: https://glama.ai/mcp/servers/doteyeso-ops/mcp-server-vibes-coded/admin/doc
 | --- | --- |
 | Python version | **3.11** (or 3.12) |
 | **Build steps** | `["pip install --no-cache-dir -r requirements.txt"]` |
-| **CMD arguments** | `["python", "mcp_server.py"]` |
-| Env JSON schema | `{"type":"object","properties":{"VIBES_ORIGIN":{"type":"string","description":"API origin"}},"required":[]}` |
-| Placeholder parameters | `{}` |
+| **CMD arguments** | `["python", "-u", "mcp_server.py"]` |
+| Env JSON schema | `{"type":"object","properties":{"VIBES_ORIGIN":{"type":"string","description":"API origin"},"PYTHONUNBUFFERED":{"type":"string"}},"required":[]}` |
+| Placeholder parameters | `{"PYTHONUNBUFFERED":"1"}` (optional; `-u` already covers it) |
 | Pinned commit SHA | **empty** (after Sync) |
 
-Do **not** set `PORT` or `MCP_TRANSPORT` — Glama needs stdio. Generated CMD becomes `mcp-proxy -- python mcp_server.py`.
+Do **not** set `PORT` or `MCP_TRANSPORT` — Glama needs stdio. Generated CMD becomes `mcp-proxy -- python -u mcp_server.py`.
+
+**Critical:** use `python -u` (unbuffered). Without it, mcp-proxy hangs on “Expected server to respond to ping” ([mcp-proxy#55](https://github.com/punkpeye/mcp-proxy/issues/55)).
+
+### Stuck `pending` with empty Docker build logs
+
+That is Glama’s builder queue, not your code — same pattern as “load remote build context then nothing.” Wait a few minutes, or cancel and **Deploy** again after Sync. If it never leaves pending, email **support@glama.ai** with the build id.
 
 ## Release
 

@@ -17,13 +17,17 @@ from typing import Any
 from urllib.parse import urlparse
 
 logger = logging.getLogger("vibes-coded-mcp")
-logging.basicConfig(level=logging.INFO)
+# stderr only — stdout is the MCP JSON-RPC channel (mcp-proxy / Glama).
+logging.basicConfig(level=logging.INFO, stream=__import__("sys").stderr)
+# Unbuffered stdio even if launcher forgets `python -u`.
+os.environ.setdefault("PYTHONUNBUFFERED", "1")
+
 
 from mcp.server.fastmcp import FastMCP
 
 ORIGIN = os.getenv("VIBES_ORIGIN", "https://vibes-coded-production.up.railway.app").rstrip("/")
 WELLKNOWN_URL = f"{ORIGIN}/.well-known/x402.json"
-VERSION = "1.0.2"
+VERSION = "1.0.3"
 
 mcp = FastMCP("vibes-coded-agent-tools")
 
@@ -40,13 +44,13 @@ _FALLBACK_SLUGS = (
 )
 
 
-def _fetch_resources() -> list[dict]:
-    """Fetch all x402 resources from the live discovery doc."""
+def _fetch_resources(timeout: float = 3.0) -> list[dict]:
+    """Fetch x402 resources. Short timeout so Glama mcp-proxy verify never stalls."""
     req = urllib.request.Request(
         WELLKNOWN_URL,
         headers={"User-Agent": f"vibes-coded-mcp/{VERSION}"},
     )
-    with urllib.request.urlopen(req, timeout=20) as r:
+    with urllib.request.urlopen(req, timeout=timeout) as r:
         data = json.loads(r.read().decode())
     return data.get("resources", []) or []
 
@@ -100,9 +104,19 @@ def _register_slug_tool(slug: str, path: str, title: str, desc: str, price_str: 
     mcp.add_tool(fn, name=name, description=doc)
 
 
-# Build tools from live discovery; never crash at import (Glama Docker inspectors).
+# Guarantee a non-empty tool surface for inspectors first (Glama verify is fast).
+for _slug in _FALLBACK_SLUGS:
+    _register_slug_tool(
+        _slug,
+        f"/api/v1/outcomes/{_slug}",
+        _slug,
+        "Vibes-Coded outcome API (fallback registration).",
+        "varies",
+    )
+
+# Enrich from live discovery; never block verify more than a few seconds.
 try:
-    RESOURCES = _fetch_resources()
+    RESOURCES = _fetch_resources(timeout=3.0)
     logger.info("catalog loaded: %s resources", len(RESOURCES))
 except Exception as _e:
     logger.warning("catalog fetch failed at startup: %s", _e)
@@ -123,16 +137,6 @@ for _res in RESOURCES:
     else:
         _price_str = f"${_price}" if not str(_price).startswith("$") else str(_price)
     _register_slug_tool(str(_slug), _path, str(_title), str(_desc), _price_str)
-
-# Guarantee a non-empty tool surface for inspectors even if catalog was empty.
-for _slug in _FALLBACK_SLUGS:
-    _register_slug_tool(
-        _slug,
-        f"/api/v1/outcomes/{_slug}",
-        _slug,
-        "Vibes-Coded outcome API (fallback registration).",
-        "varies",
-    )
 
 
 def _slug_to_path(slug: str) -> str | None:
