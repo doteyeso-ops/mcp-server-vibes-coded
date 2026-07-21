@@ -1,2 +1,0 @@
-[console_scripts]
-mcp-server-vibes-coded = mcp_server:main

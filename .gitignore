@@ -2,3 +2,8 @@
 mcp-publisher.tar.gz
 __pycache__/
 *.pyc
+
+*.egg-info/
+dist/
+build/
+
