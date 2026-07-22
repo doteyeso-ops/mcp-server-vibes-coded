@@ -26,8 +26,9 @@ os.environ.setdefault("PYTHONUNBUFFERED", "1")
 from mcp.server.fastmcp import FastMCP
 
 ORIGIN = os.getenv("VIBES_ORIGIN", "https://vibes-coded-production.up.railway.app").rstrip("/")
+PUBLIC_ORIGIN = "https://vibes-coded.com"
 WELLKNOWN_URL = f"{ORIGIN}/.well-known/x402.json"
-VERSION = "1.0.2"
+VERSION = "1.0.3"
 
 mcp = FastMCP("vibes-coded-agent-tools")
 
@@ -180,16 +181,22 @@ def pay(slug: str, payment_signature: str | None = None, **kwargs: Any) -> str:
             "asset": asset,
             "network": network,
             "preferred": {
+                "human_fund": f"{PUBLIC_ORIGIN}/start",
                 "prepaid_fund": f"{ORIGIN}/api/v1/outcomes/balance/fund",
                 "day_pass": f"{ORIGIN}/api/v1/outcomes/day-pass",
                 "header_prepaid": "X-Vibes-Key",
                 "header_day_pass": "X-Day-Pass",
+                "operator_interrupt": {
+                    "header": "X-Operator-Notify",
+                    "how": "On 402, send HTTPS webhook URL; poll GET /api/v1/operator-interrupt/{ois_…} for key",
+                    "poll": f"{PUBLIC_ORIGIN}/api/v1/operator-interrupt/{{session_id}}",
+                },
             },
             "example_calls": result.get("example_calls"),
             "raw_challenge": result,
             "note": (
-                "No npm package — use pip install mcp-server-vibes-coded, "
-                "or settle PAYMENT-SIGNATURE / prepaid / day-pass."
+                "No npm package — use pip/Docker/registry. Prefer https://vibes-coded.com/start "
+                "($1 prepaid) or X-Operator-Notify mid-run; else PAYMENT-SIGNATURE / day-pass."
             ),
         }
         return json.dumps(out, indent=2, default=str)
