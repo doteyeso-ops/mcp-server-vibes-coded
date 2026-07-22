@@ -37,8 +37,10 @@ That is Glama’s builder queue, not your code — same pattern as “load remot
 ## Release
 
 1. **Deploy** (build test)
-2. When green → **Make Release** → version `1.0.2`
-3. Score / installability should leave “No Glama release”
+2. When green → **Make Release** → version `1.0.3`
+3. Score / installability should leave “No Glama release” / quality `?`
+4. Confirm public API shows tools: `GET https://glama.ai/api/mcp/v1/servers/doteyeso-ops/mcp-server-vibes-coded` → `tools` non-empty
+5. Reply on awesome-mcp-servers#10486 once score badge leaves `?`
 
 ## Why verify failed before
 
