@@ -20,11 +20,17 @@ Open: https://glama.ai/mcp/servers/doteyeso-ops/mcp-server-vibes-coded/admin/doc
 | Field | Value |
 | --- | --- |
 | Python version | **3.11** (or 3.12) |
-| **Build steps** | `["python -m ensurepip --upgrade && python -m pip install --no-cache-dir -r requirements.txt"]` |
+| **Build steps** | `["uv pip install --system -r requirements.txt"]` |
 | **CMD arguments** | `["python", "-u", "mcp_server.py"]` |
 | Env JSON schema | `{"type":"object","properties":{"VIBES_ORIGIN":{"type":"string","description":"API origin"},"PYTHONUNBUFFERED":{"type":"string"}},"required":[]}` |
-| Placeholder parameters | `{"PYTHONUNBUFFERED":"1","VIBES_ORIGIN":"https://vibes-coded.com"}` |
-| Pinned commit SHA | **empty** (after Sync) |
+| Placeholder parameters | `{"VIBES_ORIGIN":"https://vibes-coded.com"}` |
+| Pinned commit SHA | **empty** (after Sync) — do **not** leave `fc0621c…` |
+
+**Form JSON gotchas (Glama validates each field separately):**
+- **Placeholder parameters** = flat object of **strings only** (not the env schema). Valid: `{"VIBES_ORIGIN":"https://vibes-coded.com"}` or `{}`.
+- **Env JSON schema** = JSON Schema object (different field).
+- **Build steps** / **CMD arguments** = JSON **arrays**.
+- No smart quotes, no trailing commas, no wrapping in backticks. If the form still says Invalid JSON on placeholders, paste `{}` and set `VIBES_ORIGIN` later.
 
 **Do not** put `mcp-proxy` in CMD arguments — Glama already wraps as `mcp-proxy -- <your CMD>`.
 
@@ -41,19 +47,40 @@ Wrong:
 ["pip install -r requirements.txt"]
 ```
 
-Right (ensurepip then module pip):
-```json
-["python -m ensurepip --upgrade && python -m pip install --no-cache-dir -r requirements.txt"]
+### Known failure: `externally-managed-environment` (PEP 668)
+
+`python -m ensurepip` / `python -m pip` fails on Glama’s uv-managed Python:
+
+```text
+error: externally-managed-environment
+× This environment is managed by uv and should not be modified.
 ```
 
-Fallback if ensurepip is blocked:
+**Right (use this):**
 ```json
 ["uv pip install --system -r requirements.txt"]
 ```
 
+Only if `uv` is missing (it shouldn’t be — Glama installs it in the base layer):
+```json
+["python -m pip install --break-system-packages --no-cache-dir -r requirements.txt"]
+```
+
+### Known failure: still building old SHA `fc0621c`
+
+Log line `git checkout fc0621c…` means the admin form still has a **pinned commit**. Clear the pin, **Sync**, then Deploy — otherwise you rebuild the Jul-20 tree forever.
+
 ### Stuck `pending` with empty Docker build logs
 
 That is Glama’s builder queue, not your code — same pattern as “load remote build context then nothing.” Wait a few minutes, or cancel and **Deploy** again after Sync. If it never leaves pending, email **support@glama.ai** with the build id.
+
+### Can we Deploy via the public API / curl?
+
+**No.** `GET https://glama.ai/api/mcp/v1/servers/...` is **read-only directory metadata** (name, tools, env schema). It cannot Sync, Deploy, or Make Release.
+
+There is **no documented public write API** for maintainer Deploy. Official path is admin UI only ([How to Make a Release](https://glama.ai/blog/2026-03-15-how-to-make-a-release)). `glama.json` schema is **only** `$schema` + `maintainers` — cannot embed buildSteps/CMD.
+
+**Escape hatch:** email **support@glama.ai** (or Discord) with the exact build spec below and ask them to apply + run Deploy + score. CC that awesome-mcp #10486 is blocked on quality grade.
 
 ## Release
 
