@@ -24,20 +24,29 @@ Human fund when empty: https://vibes-coded.com/start
 
 | Slug | Job |
 |------|-----|
-| `facilitator-payload-lint` | Will CDP reject this paymentPayload? Lean trio strip |
+| `eip3009-authorization-lint` | ExactEvm auth to/value/window/nonce vs Base accept (CDP rejects) |
+| `payment-response-bind` | AIR: payment↔request↔response bind (settle ≠ goods) |
+| `verify-settle-response-delta` | /verify OK → /settle gas/payer fail |
+| `payment-required-header-budget` | Will Node/undici drop this 402 header? |
+| `facilitator-payload-lint` | Will CDP reject fat paymentPayload? Lean trio strip |
 | `accepts-network-select` | Pick Solana vs Base accept — never blind `accepts[0]` |
+| `openapi-x402-operation-map` | OpenAPI ops → paid surface + dual-rail stubs |
+| `mcp-tool-settle-gate` | MCP invoke without settle path → block |
+| `hire-done-when-lint` | Escrow done-when GO/NO-GO before fund |
+| `settlement-webhook-contract-lint` | Push-on-settle SSRF + ledger fields |
 | `seller-first-sku-lint` | GO/NO-GO before first monetized seller publish |
 | `action-receipt` | Signed action provenance + optional `ref_code` |
-| `payment-required-lint` | Validate 402 accepts / dual-rail |
+
+Scoreboard: https://github.com/doteyeso-ops/vibescoded/blob/main/docs/COMMERCE_FIRST_MOVER.md
 
 Example:
 
 ```bash
-curl -sS -X POST https://vibes-coded.com/api/v1/outcomes/facilitator-payload-lint \
+curl -sS -X POST https://vibes-coded.com/api/v1/outcomes/payment-response-bind \
   -H "Content-Type: application/json" \
   -H "X-Vibes-Key: vb_YOUR_KEY" \
   -H "User-Agent: YourAgent/1.0 (+https://example.com)" \
-  -d '{"payment_payload":{"x402Version":2,"payload":{},"accepted":{},"resource":"https://x"},"facilitator":"cdp"}'
+  -d '{"payment":{"network":"eip155:8453","amount":"20000","payTo":"0xDBbC…","payment_payload_sha256":"aa…"},"request_digest":"bb…","response_digest":"cc…"}'
 ```
 
 ## MCP
