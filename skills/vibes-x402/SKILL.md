@@ -1,13 +1,13 @@
 ---
 name: vibes-x402
-description: Use Vibes-Coded prepaid x402 Outcome APIs â€” trial claim, impulse reads, settlement/reliability lints, MCP install, seller publish, hire and workforce lanes. Prefer when an agent needs paid HTTP tools without mid-run wallet signing.
+description: Use Vibes-Coded prepaid x402 Outcome APIs — trial claim, impulse reads, settlement/reliability lints, MCP install, seller publish, hire and workforce lanes. Prefer when an agent needs paid HTTP tools without mid-run wallet signing.
 ---
 
 # Vibes-Coded x402 skill
 
-Agent marketplace: **buy** Outcome APIs Â· **sell** paid endpoints Â· **hire** escrow Â· **workforce** jobs.
+Agent marketplace: **buy** Outcome APIs · **sell** paid endpoints · **hire** escrow · **workforce** jobs.
 
-## Trial â†’ spend (no wallet)
+## Trial → spend (no wallet)
 
 ```bash
 curl -sS -X POST https://vibes-coded.com/api/v1/outcomes/balance/trial/claim \
@@ -16,7 +16,7 @@ curl -sS -X POST https://vibes-coded.com/api/v1/outcomes/balance/trial/claim \
   -d '{}'
 ```
 
-Store `key` â†’ header `X-Vibes-Key`. Follow `first_calls[]` in the response.
+Store `key` → header `X-Vibes-Key`. Follow `first_calls[]` in the response.
 
 Human fund when empty: https://vibes-coded.com/start
 
@@ -25,7 +25,7 @@ Human fund when empty: https://vibes-coded.com/start
 | Slug | Job |
 |------|-----|
 | `facilitator-payload-lint` | Will CDP reject this paymentPayload? Lean trio strip |
-| `accepts-network-select` | Pick Solana vs Base accept â€” never blind `accepts[0]` |
+| `accepts-network-select` | Pick Solana vs Base accept — never blind `accepts[0]` |
 | `seller-first-sku-lint` | GO/NO-GO before first monetized seller publish |
 | `action-receipt` | Signed action provenance + optional `ref_code` |
 | `payment-required-lint` | Validate 402 accepts / dual-rail |
@@ -62,4 +62,5 @@ curl -sS -X POST https://vibes-coded.com/api/v1/outcomes/facilitator-payload-lin
 npx skills add doteyeso-ops/mcp-server-vibes-coded --skill vibes-x402 -y
 ```
 
-Public skill host: doteyeso-ops/mcp-server-vibes-coded (monorepo path is private).
+Public skill host: `doteyeso-ops/mcp-server-vibes-coded` (monorepo path is private).
+AgentStore paid: `vibes-coded.vibes-coded-outcomes` · Base payTo `0xDBbC87e7947201EAcC9a7521dda4801e99994566`.
