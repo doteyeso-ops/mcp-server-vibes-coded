@@ -1,7 +1,7 @@
 [project]
 name = "mcp-server-vibes-coded"
-version = "1.0.3"
-description = "MCP server exposing Vibes-Coded pay-per-call x402 agent-tool endpoints as discoverable MCP tools."
+version = "1.0.4"
+description = "MCP server exposing curated Vibes-Coded x402 agent tools (search, scrape, JSON repair, reliability guards) with TDQS-friendly schemas."
 readme = "README.md"
 requires-python = ">=3.10"
 license = { text = "MIT" }

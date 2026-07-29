@@ -8,15 +8,22 @@ MCP Registry, then call tools that proxy to `https://vibes-coded.com/api/v1/outc
 
 ## What it does
 
-- Auto-registers catalog endpoints as MCP tools (fetched live from Vibes-Coded discovery).
-- Free-trial endpoints work with no auth. Paid endpoints settle USDC via x402 (HTTP 402 → pay → retry).
-- Categories: agent reliability (state / idempotency / drift / retry-storm), memory, cost control,
-  supply-chain trust, and utilities (web-search, json-repair, page-markdown).
-- Includes a **`pay`** tool that returns the exact 402 challenge (or forwards `PAYMENT-SIGNATURE`).
-- Prefer **prepaid** (`X-Vibes-Key`) or a **24h day-pass** (`X-Day-Pass`) over per-call wallet signing.
+**Default (v1.0.4+): curated tools only** — explicit schemas + annotations for Glama TDQS:
+
+| Tool | Purpose |
+|------|---------|
+| `vc_web_search` | DuckDuckGo search → titles/URLs/snippets |
+| `vc_page_markdown` | Fetch URL → markdown |
+| `vc_json_repair` | Repair malformed LLM JSON |
+| `vc_agent_state_guard` / `vc_idempotency_guard` / `vc_drift_guard` / `vc_retry_storm_guard` | Pre-flight reliability checks |
+| `pay` | Proxy any catalog slug (or return 402 challenge) |
+| `health` | Liveness |
+
+Set `VIBES_MCP_FULL_CATALOG=1` to also register every live catalog slug (legacy; hurts TDQS min scores).
+
+- Paid calls settle USDC via x402 (HTTP 402 → pay → retry), or use prepaid `X-Vibes-Key` / day-pass.
 - **Human fund UI:** https://vibes-coded.com/start ($1 USDC → copy `X-Vibes-Key`).
-- **Mid-run rescue (Operator Interrupt):** send header `X-Operator-Notify: https://…` on 402 → poll
-  `GET /api/v1/operator-interrupt/{ois_…}` until `status=funded`.
+- **Mid-run rescue (Operator Interrupt):** `X-Operator-Notify` → poll until `status=funded`.
 
 ## Install
 
@@ -33,7 +40,7 @@ Default (stdio — local clients, MCP Registry OCI, Glama `mcp-proxy`):
 
 ```bash
 python mcp_server.py
-# or: docker run -i --rm ghcr.io/doteyeso-ops/mcp-server-vibes-coded:1.0.3
+# or: docker run -i --rm ghcr.io/doteyeso-ops/mcp-server-vibes-coded:1.0.4
 ```
 
 HTTP mode (Smithery / inspectors):
@@ -43,11 +50,12 @@ PORT=3000 MCP_TRANSPORT=streamable-http python mcp_server.py
 # health: GET /health  GET /healthz
 ```
 
-Glama release steps: see [`GLAMA_RELEASE.md`](GLAMA_RELEASE.md) (Glama generates its own image; use stdio CMD, not HTTP).
+Glama release steps: see [`GLAMA_RELEASE.md`](GLAMA_RELEASE.md) (Glama generates its own image; use stdio CMD, not HTTP). After push, use **Sync Server** on the Glama page so TDQS rescores.
 
 Env:
 
 - `VIBES_ORIGIN` — API base (default production Railway URL that bypasses Cloudflare)
+- `VIBES_MCP_FULL_CATALOG=1` — register all live catalog tools (off by default)
 - `MCP_TRANSPORT=streamable-http` + `PORT` — optional HTTP mode for hosted inspectors
 - `HOST` (HTTP mode only)
 

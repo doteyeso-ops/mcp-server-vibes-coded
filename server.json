@@ -1,16 +1,16 @@
 {
   "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
   "name": "io.github.doteyeso-ops/mcp-server-vibes-coded",
-  "description": "Vibes-Coded x402 agent tools MCP: reliability guards, pay tool, day-pass, prepaid.",
+  "description": "Curated Vibes-Coded x402 MCP tools: search, scrape, JSON repair, reliability guards, pay.",
   "repository": {
     "url": "https://github.com/doteyeso-ops/mcp-server-vibes-coded",
     "source": "github"
   },
-  "version": "1.0.3",
+  "version": "1.0.4",
   "packages": [
     {
       "registryType": "oci",
-      "identifier": "ghcr.io/doteyeso-ops/mcp-server-vibes-coded:1.0.3",
+      "identifier": "ghcr.io/doteyeso-ops/mcp-server-vibes-coded:1.0.4",
       "transport": {
         "type": "stdio"
       },
@@ -20,13 +20,19 @@
           "description": "Vibes-Coded API origin (defaults to production Railway).",
           "isRequired": false,
           "format": "string"
+        },
+        {
+          "name": "VIBES_MCP_FULL_CATALOG",
+          "description": "Set to 1 to register all live catalog tools (hurts TDQS; off by default).",
+          "isRequired": false,
+          "format": "string"
         }
       ]
     },
     {
       "registryType": "pypi",
       "identifier": "mcp-server-vibes-coded",
-      "version": "1.0.3",
+      "version": "1.0.4",
       "transport": {
         "type": "stdio"
       },
@@ -34,6 +40,12 @@
         {
           "name": "VIBES_ORIGIN",
           "description": "Vibes-Coded API origin (defaults to production Railway).",
+          "isRequired": false,
+          "format": "string"
+        },
+        {
+          "name": "VIBES_MCP_FULL_CATALOG",
+          "description": "Set to 1 to register all live catalog tools (hurts TDQS; off by default).",
           "isRequired": false,
           "format": "string"
         }
