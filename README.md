@@ -40,7 +40,7 @@ Default (stdio — local clients, MCP Registry OCI, Glama `mcp-proxy`):
 
 ```bash
 python mcp_server.py
-# or: docker run -i --rm ghcr.io/doteyeso-ops/mcp-server-vibes-coded:1.0.4
+# or: docker run -i --rm ghcr.io/doteyeso-ops/mcp-server-vibes-coded:1.0.5
 ```
 
 HTTP mode (Smithery / inspectors):

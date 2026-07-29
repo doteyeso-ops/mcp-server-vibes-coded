@@ -28,7 +28,7 @@ from mcp.types import ToolAnnotations
 ORIGIN = os.getenv("VIBES_ORIGIN", "https://vibes-coded-production.up.railway.app").rstrip("/")
 PUBLIC_ORIGIN = "https://vibes-coded.com"
 WELLKNOWN_URL = f"{ORIGIN}/.well-known/x402.json"
-VERSION = "1.0.4"
+VERSION = "1.0.5"
 
 mcp = FastMCP("vibes-coded-agent-tools")
 

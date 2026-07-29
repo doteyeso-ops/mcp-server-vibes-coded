@@ -6,11 +6,11 @@
     "url": "https://github.com/doteyeso-ops/mcp-server-vibes-coded",
     "source": "github"
   },
-  "version": "1.0.4",
+  "version": "1.0.5",
   "packages": [
     {
       "registryType": "oci",
-      "identifier": "ghcr.io/doteyeso-ops/mcp-server-vibes-coded:1.0.4",
+      "identifier": "ghcr.io/doteyeso-ops/mcp-server-vibes-coded:1.0.5",
       "transport": {
         "type": "stdio"
       },
@@ -32,7 +32,7 @@
     {
       "registryType": "pypi",
       "identifier": "mcp-server-vibes-coded",
-      "version": "1.0.4",
+      "version": "1.0.5",
       "transport": {
         "type": "stdio"
       },
