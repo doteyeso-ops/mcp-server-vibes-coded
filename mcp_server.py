@@ -31,7 +31,7 @@ PUBLIC_ORIGIN = "https://vibes-coded.com"
 # notepad, attest/reputation, passes). The slim x402.json is featured-only (64)
 # and omits the ecosystem tools agents need to discover.
 WELLKNOWN_URL = f"{ORIGIN}/.well-known/x402-marketplace.json"
-VERSION = "1.1.0"
+VERSION = "1.2.0"
 
 mcp = FastMCP("vibes-coded-agent-tools")
 
@@ -395,6 +395,190 @@ def vc_workspace_list(
     return _outcome(
         "workspace-list",
         {"workspace_id": workspace_id, "member_key": member_key},
+        payment_signature,
+    )
+
+
+# --- Ecosystem layer II: memory, trust, payments rails ---
+# Complements the journey tools: durable memory (notepad), trust (attest +
+# reputation), and inbound-payment watching.
+
+@mcp.tool(annotations=_RO_OPEN)
+def vc_notepad_save(
+    owner_key: str = Field(description="Your stable agent identity."),
+    note_key: str = Field(description="Unique key for this note, e.g. task-state-v3."),
+    content: dict | str = Field(description="State to persist — JSON object or text."),
+    payment_signature: str | None = Field(
+        default=None, description="Optional x402 PAYMENT-SIGNATURE if not using X-Vibes-Key."
+    ),
+) -> str:
+    """Save durable memory (notepad-save, 5c). Content-addressed JSON you can resume in any future session.
+
+    Use when you lose context often or want state that survives restarts. The note
+    is stored server-side keyed by owner_key + note_key.
+    Sibling: vc_notepad_read, vc_notepad_list, vc_notepad_share.
+    """
+    return _outcome(
+        "notepad-save",
+        {"owner_key": owner_key, "note_key": note_key, "content": content},
+        payment_signature,
+    )
+
+
+@mcp.tool(annotations=_RO_OPEN)
+def vc_notepad_read(
+    owner_key: str = Field(description="Your stable agent identity."),
+    note_key: str = Field(description="Note key to read."),
+    payment_signature: str | None = Field(
+        default=None, description="Optional x402 PAYMENT-SIGNATURE if not using X-Vibes-Key."
+    ),
+) -> str:
+    """Read durable memory (notepad-read, 2c). Restore state saved in a previous session.
+
+    Sibling: vc_notepad_save, vc_notepad_list.
+    """
+    return _outcome(
+        "notepad-read",
+        {"owner_key": owner_key, "note_key": note_key},
+        payment_signature,
+    )
+
+
+@mcp.tool(annotations=_RO_OPEN)
+def vc_notepad_list(
+    owner_key: str = Field(description="Your stable agent identity."),
+    payment_signature: str | None = Field(
+        default=None, description="Optional x402 PAYMENT-SIGNATURE if not using X-Vibes-Key."
+    ),
+) -> str:
+    """List all your durable memory notes (notepad-list, 1c) — the memory inventory.
+
+    Sibling: vc_notepad_save, vc_notepad_read.
+    """
+    return _outcome(
+        "notepad-list",
+        {"owner_key": owner_key},
+        payment_signature,
+    )
+
+
+@mcp.tool(annotations=_RO_OPEN)
+def vc_notepad_share(
+    owner_key: str = Field(description="Your stable agent identity."),
+    note_key: str = Field(description="Note key to publish to the marketplace."),
+    price_cents: int = Field(default=5, description="Price in cents other agents pay to read it."),
+    payment_signature: str | None = Field(
+        default=None, description="Optional x402 PAYMENT-SIGNATURE if not using X-Vibes-Key."
+    ),
+) -> str:
+    """Publish one of your memory notes to the priced memory marketplace (2c).
+
+    Other agents can browse and pay to read it — agent-to-agent memory commerce.
+    Sibling: vc_notepad_browse, vc_notepad_save.
+    """
+    return _outcome(
+        "notepad-share",
+        {"owner_key": owner_key, "note_key": note_key, "price_cents": price_cents},
+        payment_signature,
+    )
+
+
+@mcp.tool(annotations=_RO_OPEN)
+def vc_notepad_browse(
+    query: str | None = Field(default=None, description="Optional keyword filter."),
+    limit: int = Field(default=10, description="Max results."),
+    payment_signature: str | None = Field(
+        default=None, description="Optional x402 PAYMENT-SIGNATURE if not using X-Vibes-Key."
+    ),
+) -> str:
+    """Browse the priced memory marketplace (2c) — find notes other agents sell.
+
+    Sibling: vc_notepad_share.
+    """
+    return _outcome(
+        "notepad-browse",
+        {"query": query, "limit": limit},
+        payment_signature,
+    )
+
+
+@mcp.tool(annotations=_RO_OPEN)
+def vc_attest(
+    claim_type: str = Field(description="work_done | identity | capability | observation | delivery | receipt | permission"),
+    agent_id: str = Field(default="", description="Agent making/attesting the claim."),
+    subject: str = Field(default="", description="Claim subject."),
+    statement: str = Field(description="The claim itself."),
+    payment_signature: str | None = Field(
+        default=None, description="Optional x402 PAYMENT-SIGNATURE if not using X-Vibes-Key."
+    ),
+) -> str:
+    """Sign a claim offline-verifiable (attest, 5c). Returns a signed attestation (Ed25519 + HMAC receipt).
+
+    Use to prove work done, capability, or a delivery — anyone can verify without
+    trusting us (offline-verifiable).
+    Sibling: vc_attest_verify, vc_agent_reputation.
+    """
+    return _outcome(
+        "attest",
+        {"claim_type": claim_type, "agent_id": agent_id, "subject": subject, "statement": statement},
+        payment_signature,
+    )
+
+
+@mcp.tool(annotations=_RO_OPEN)
+def vc_attest_verify(
+    claim: dict = Field(description="The attestation object returned by vc_attest."),
+    payment_signature: str | None = Field(
+        default=None, description="Optional x402 PAYMENT-SIGNATURE if not using X-Vibes-Key."
+    ),
+) -> str:
+    """Verify a signed attestation offline (attest-verify, 2c). Tampered claims fail.
+
+    Sibling: vc_attest.
+    """
+    return _outcome(
+        "attest-verify",
+        {"claim": claim},
+        payment_signature,
+    )
+
+
+@mcp.tool(annotations=_RO_OPEN)
+def vc_agent_reputation(
+    agent_id: str = Field(description="Agent id to score (0-100)."),
+    payment_signature: str | None = Field(
+        default=None, description="Optional x402 PAYMENT-SIGNATURE if not using X-Vibes-Key."
+    ),
+) -> str:
+    """Score an agent's reputation 0-100 (agent-reputation, 10c) from verified attestations + on-chain activity.
+
+    Check an agent before you pay it. Unproven agents score low; established ones
+    with attestations + history score high.
+    Sibling: vc_attest, vc_attest_verify, vc_agent_leaderboard.
+    """
+    return _outcome(
+        "agent-reputation",
+        {"agent_id": agent_id},
+        payment_signature,
+    )
+
+
+@mcp.tool(annotations=_RO_OPEN)
+def vc_payment_watch(
+    network: str = Field(default="solana", description="solana or base"),
+    wallet: str = Field(description="Wallet to watch for inbound USDC."),
+    since: str | None = Field(default=None, description="Cursor: last signature seen (position marker)."),
+    payment_signature: str | None = Field(
+        default=None, description="Optional x402 PAYMENT-SIGNATURE if not using X-Vibes-Key."
+    ),
+) -> str:
+    """Watch a wallet for new inbound USDC (payment-watch, 2c) — the 'did the money land?' check.
+
+    Poll with the last signature as `since` to get only what's new.
+    """
+    return _outcome(
+        "payment-watch",
+        {"network": network, "wallet": wallet, "since": since},
         payment_signature,
     )
 
