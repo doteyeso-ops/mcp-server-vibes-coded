@@ -17,7 +17,7 @@ LABEL io.modelcontextprotocol.server.name="io.github.doteyeso-ops/mcp-server-vib
 LABEL org.opencontainers.image.source="https://github.com/doteyeso-ops/mcp-server-vibes-coded"
 LABEL org.opencontainers.image.description="Vibes-Coded x402 agent tools MCP server"
 
-ENV VIBES_ORIGIN=https://vibes-coded-production.up.railway.app
+ENV VIBES_ORIGIN=https://vibes-coded.com
 # Default: stdio (MCP Registry OCI + Glama mcp-proxy). For HTTP inspectors set:
 #   MCP_TRANSPORT=streamable-http PORT=3000
 ENV HOST=0.0.0.0
