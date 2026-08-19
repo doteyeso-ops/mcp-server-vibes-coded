@@ -35,6 +35,9 @@ Set `VIBES_MCP_FULL_CATALOG=1` to also register every live catalog slug (legacy;
 
 ## Install
 
+**Hosted (no install):** `https://mcp-vibes-coded-production.up.railway.app/mcp`  
+Pointer: `https://vibes-coded.com/.well-known/mcp.json` · Smithery: `https://smithery.ai/servers/vibes-coded/vibes-coded-agent-tools`
+
 ```bash
 pip install mcp-server-vibes-coded
 mcp-server-vibes-coded          # stdio MCP for local clients
