@@ -49,6 +49,25 @@ curl -sS -X POST \
   -d '{"content":"PASTE THE COMPLETE SKILL OR PLUGIN TEXT HERE"}'
 ```
 
+## When multiple scanners disagree
+
+Use the separate consensus service to reconcile two to ten reports from tools such as Snyk, Cisco Skill Scanner, Mondoo, or internal scanners:
+
+`https://fiatdock.com/s/svc_392cf062-d72b-4816-9bfb-4eb074d35cc6`
+
+Price: **$0.10 USDC per reconciliation on Base**. Request body:
+
+```json
+{
+  "reports": [
+    {"scanner": "scanner-a", "verdict": "allow", "risk_score": 8, "findings": []},
+    {"scanner": "scanner-b", "verdict": "block", "risk_score": 92, "findings": [{"rule_id": "credential-harvest"}]}
+  ]
+}
+```
+
+The result measures agreement, surfaces conflicts, combines rule identifiers, applies a conservative maximum-severity decision, and fingerprints the evidence bundle. Use the same FiatDock 402 → signed `PAYMENT-SIGNATURE` retry flow described above.
+
 ## Decision policy
 
 - `block`: do not install or execute; resolve every critical/high finding.
