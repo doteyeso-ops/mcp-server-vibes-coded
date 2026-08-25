@@ -8,9 +8,11 @@ Hosted HTTP:  MCP_TRANSPORT=streamable-http PORT=3000 python mcp_server.py
 """
 from __future__ import annotations
 
+import hashlib
 import json
 import logging
 import os
+import re
 import urllib.error
 import urllib.request
 from typing import Any
@@ -32,7 +34,7 @@ PUBLIC_ORIGIN = "https://vibes-coded.com"
 # notepad, attest/reputation, passes). The slim x402.json is featured-only (64)
 # and omits the ecosystem tools agents need to discover.
 WELLKNOWN_URL = f"{ORIGIN}/.well-known/x402-marketplace.json"
-VERSION = "1.2.1"
+VERSION = "1.3.0"
 
 PUBLIC_HOST = os.getenv(
     "MCP_PUBLIC_HOST", "vibes-coded-mcp-production.up.railway.app"
@@ -694,6 +696,136 @@ def _slug_to_path(slug: str) -> str | None:
         if _doc_slug == slug:
             return _r.get("url") or _endpoint_path(_r)
     return f"{ORIGIN}/api/v1/outcomes/{slug}"
+
+
+_SKILL_RISK_RULES = (
+    (
+        "pipe_to_shell",
+        "critical",
+        50,
+        re.compile(r"(?:curl|wget)\b[^\n|]{0,500}\|\s*(?:sudo\s+)?(?:ba)?sh\b", re.I),
+        "Downloads content and pipes it directly into a shell.",
+    ),
+    (
+        "private_key_access",
+        "critical",
+        35,
+        re.compile(r"(?:~/|/home/[^/]+/|[A-Z]:\\\\Users\\\\[^\\]+\\\\)?\.ssh[/\\\\](?:id_rsa|id_ed25519)|BEGIN\s+(?:RSA\s+)?PRIVATE\s+KEY", re.I),
+        "References private SSH or cryptographic key material.",
+    ),
+    (
+        "secret_env_access",
+        "high",
+        35,
+        re.compile(r"(?:os\.environ|getenv|process\.env)[^\n]{0,120}(?:API[_-]?KEY|SECRET|TOKEN|PASSWORD|PRIVATE[_-]?KEY)", re.I),
+        "Reads a secret-bearing environment variable.",
+    ),
+    (
+        "credential_file_access",
+        "high",
+        30,
+        re.compile(r"(?:\.aws[/\\\\]credentials|\.config[/\\\\]gcloud|\.npmrc|\.pypirc|(?:^|[/\\\\])\.env\b)", re.I | re.M),
+        "References a common credential file.",
+    ),
+    (
+        "known_exfiltration_sink",
+        "high",
+        30,
+        re.compile(r"\b(?:webhook\.site|requestbin\.(?:com|net)|pipedream\.net|ngrok(?:-free)?\.(?:app|io))\b", re.I),
+        "References a commonly abused external collection endpoint.",
+    ),
+    (
+        "shell_execution",
+        "high",
+        25,
+        re.compile(r"\b(?:subprocess\.(?:run|call|Popen)|os\.system|child_process\.(?:exec|spawn)|execSync)\s*\(", re.I),
+        "Executes an operating-system command.",
+    ),
+    (
+        "destructive_command",
+        "critical",
+        50,
+        re.compile(r"(?:\brm\s+-rf\b|\bdel\s+/[sqf]\b|\bformat\s+[a-z]:|Remove-Item\b[^\n]{0,80}-Recurse)", re.I),
+        "Contains a destructive filesystem command.",
+    ),
+    (
+        "encoded_payload",
+        "medium",
+        15,
+        re.compile(r"\b(?:base64\.b64decode|atob|FromBase64String)\s*\(", re.I),
+        "Decodes an embedded payload; review what executes after decoding.",
+    ),
+    (
+        "package_install_hook",
+        "medium",
+        20,
+        re.compile(r"[\"'](?:preinstall|postinstall|prepare)[\"']\s*:", re.I),
+        "Defines an automatic package installation hook.",
+    ),
+)
+
+
+def _scan_skill_risk(content: str) -> dict:
+    """Deterministically scan skill/plugin text for high-risk capability patterns."""
+    if not isinstance(content, str) or not content.strip():
+        raise ValueError("content is empty")
+    if len(content) > 200_000:
+        raise ValueError("content exceeds 200000 characters")
+
+    findings = []
+    score = 0
+    for rule_id, severity, weight, pattern, explanation in _SKILL_RISK_RULES:
+        match = pattern.search(content)
+        if not match:
+            continue
+        score += weight
+        line_no = content.count("\n", 0, match.start()) + 1
+        line = content.splitlines()[line_no - 1].strip()[:180]
+        findings.append(
+            {
+                "rule_id": rule_id,
+                "severity": severity,
+                "weight": weight,
+                "line": line_no,
+                "evidence": line,
+                "explanation": explanation,
+            }
+        )
+
+    score = min(score, 100)
+    verdict = "block" if score >= 70 else "review" if score >= 30 else "allow"
+    return {
+        "ok": True,
+        "scanner": "vibes-coded-skill-risk/1",
+        "content_sha256": hashlib.sha256(content.encode("utf-8")).hexdigest(),
+        "characters_scanned": len(content),
+        "risk_score": score,
+        "verdict": verdict,
+        "findings": findings,
+        "recommendation": (
+            "Do not install or execute this skill until every critical/high finding is resolved."
+            if verdict == "block"
+            else "Require human review before installation."
+            if verdict == "review"
+            else "No known high-risk patterns found; provenance and signature checks are still recommended."
+        ),
+        "limitations": "Deterministic static scan; absence of findings is not proof of safety.",
+    }
+
+
+@mcp.tool(annotations=_RO)
+def vc_skill_risk_scan(
+    content: str = Field(
+        description="Complete SKILL.md, plugin manifest, installer, or source text to scan (max 200,000 characters)."
+    ),
+) -> str:
+    """Scan an agent skill or plugin for supply-chain and credential-exfiltration risks.
+
+    Use before installing untrusted SKILL.md files, MCP plugins, npm packages, or setup scripts.
+    Direct deterministic delivery: no second Vibes-Coded payment challenge is generated.
+    Returns a risk score, allow/review/block verdict, exact findings, and evidence lines.
+    """
+    return json.dumps(_scan_skill_risk(content), indent=2)
 
 
 @mcp.tool(
