@@ -34,7 +34,7 @@ PUBLIC_ORIGIN = "https://vibes-coded.com"
 # notepad, attest/reputation, passes). The slim x402.json is featured-only (64)
 # and omits the ecosystem tools agents need to discover.
 WELLKNOWN_URL = f"{ORIGIN}/.well-known/x402-marketplace.json"
-VERSION = "1.3.0"
+VERSION = "1.4.0"
 
 PUBLIC_HOST = os.getenv(
     "MCP_PUBLIC_HOST", "vibes-coded-mcp-production.up.railway.app"
@@ -811,6 +811,118 @@ def _scan_skill_risk(content: str) -> dict:
         ),
         "limitations": "Deterministic static scan; absence of findings is not proof of safety.",
     }
+
+
+def _reconcile_skill_scan_reports(reports: list[dict[str, Any]]) -> dict:
+    """Normalize multiple scanner reports and make a conservative consensus decision."""
+    if not isinstance(reports, list) or not 2 <= len(reports) <= 10:
+        raise ValueError("reports must contain 2 to 10 scanner reports")
+
+    severity_rank = {"allow": 0, "review": 1, "block": 2}
+    default_scores = {"allow": 10, "review": 50, "block": 90}
+    normalized = []
+    names = set()
+    finding_ids = set()
+    verdict_counts = {"allow": 0, "review": 0, "block": 0}
+
+    for index, report in enumerate(reports):
+        if not isinstance(report, dict):
+            raise ValueError(f"report {index + 1} must be an object")
+        scanner = str(report.get("scanner") or "").strip()
+        if not scanner:
+            raise ValueError(f"report {index + 1} scanner is required")
+        if scanner.casefold() in names:
+            raise ValueError(f"scanner names must be unique: {scanner}")
+        names.add(scanner.casefold())
+
+        verdict = str(report.get("verdict") or "").strip().lower()
+        if verdict not in severity_rank:
+            raise ValueError(f"report {index + 1} verdict must be allow, review, or block")
+        verdict_counts[verdict] += 1
+
+        raw_score = report.get("risk_score", default_scores[verdict])
+        try:
+            risk_score = max(0.0, min(100.0, float(raw_score)))
+        except (TypeError, ValueError) as exc:
+            raise ValueError(f"report {index + 1} risk_score must be numeric") from exc
+
+        report_findings = report.get("findings") or []
+        if not isinstance(report_findings, list):
+            raise ValueError(f"report {index + 1} findings must be an array")
+        ids = []
+        for finding in report_findings:
+            if not isinstance(finding, dict):
+                continue
+            finding_id = str(finding.get("rule_id") or finding.get("id") or "").strip()
+            if finding_id:
+                ids.append(finding_id)
+                finding_ids.add(finding_id)
+
+        normalized.append(
+            {
+                "scanner": scanner,
+                "verdict": verdict,
+                "risk_score": risk_score,
+                "finding_ids": sorted(set(ids)),
+            }
+        )
+
+    normalized.sort(key=lambda item: item["scanner"].casefold())
+    conservative_verdict = max(
+        (item["verdict"] for item in normalized), key=lambda value: severity_rank[value]
+    )
+    modal_count = max(verdict_counts.values())
+    agreement_percent = round(modal_count * 100 / len(normalized), 1)
+    active_verdicts = [name for name, count in verdict_counts.items() if count]
+    conflicts = []
+    if len(active_verdicts) > 1:
+        conflicts.append(
+            {
+                "type": "verdict_disagreement",
+                "verdict_counts": {k: v for k, v in verdict_counts.items() if v},
+                "policy": "conservative_max_severity",
+            }
+        )
+
+    canonical = json.dumps(normalized, sort_keys=True, separators=(",", ":"))
+    return {
+        "ok": True,
+        "reconciler": "vibes-coded-scan-consensus/1",
+        "scanner_count": len(normalized),
+        "scanner_verdicts": normalized,
+        "unanimous": len(active_verdicts) == 1,
+        "agreement_percent": agreement_percent,
+        "conservative_verdict": conservative_verdict,
+        "mean_risk_score": round(
+            sum(item["risk_score"] for item in normalized) / len(normalized), 1
+        ),
+        "combined_finding_ids": sorted(finding_ids),
+        "conflicts": conflicts,
+        "evidence_sha256": hashlib.sha256(canonical.encode("utf-8")).hexdigest(),
+        "recommendation": (
+            "Block installation until the blocking scanner findings are resolved or disproven."
+            if conservative_verdict == "block"
+            else "Require human review because at least one scanner requested review."
+            if conservative_verdict == "review"
+            else "All supplied scanners allow installation; still verify provenance and publisher identity."
+        ),
+        "limitations": "Consensus quality depends on the supplied scanner reports and does not prove safety.",
+    }
+
+
+@mcp.tool(annotations=_RO)
+def vc_skill_scan_consensus(
+    reports: list[dict[str, Any]] = Field(
+        description="Two to ten reports: {scanner, verdict: allow|review|block, risk_score?, findings?}."
+    ),
+) -> str:
+    """Reconcile conflicting agent-skill security scanner reports.
+
+    Use after running two or more independent scanners. Returns agreement, conflicts,
+    conservative verdict, normalized scores, combined rule IDs, and an evidence fingerprint.
+    Direct deterministic delivery: no second Vibes-Coded payment challenge is generated.
+    """
+    return json.dumps(_reconcile_skill_scan_reports(reports), indent=2)
 
 
 @mcp.tool(annotations=_RO)
