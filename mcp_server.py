@@ -23,6 +23,7 @@ logging.basicConfig(level=logging.INFO, stream=__import__("sys").stderr)
 os.environ.setdefault("PYTHONUNBUFFERED", "1")
 
 from mcp.server.fastmcp import FastMCP
+from mcp.server.transport_security import TransportSecuritySettings
 from mcp.types import ToolAnnotations
 
 ORIGIN = os.getenv("VIBES_ORIGIN", "https://vibes-coded.com").rstrip("/")
@@ -31,9 +32,31 @@ PUBLIC_ORIGIN = "https://vibes-coded.com"
 # notepad, attest/reputation, passes). The slim x402.json is featured-only (64)
 # and omits the ecosystem tools agents need to discover.
 WELLKNOWN_URL = f"{ORIGIN}/.well-known/x402-marketplace.json"
-VERSION = "1.2.0"
+VERSION = "1.2.1"
 
-mcp = FastMCP("vibes-coded-agent-tools")
+PUBLIC_HOST = os.getenv(
+    "MCP_PUBLIC_HOST", "vibes-coded-mcp-production.up.railway.app"
+)
+MCP_TRANSPORT_SECURITY = TransportSecuritySettings(
+    enable_dns_rebinding_protection=True,
+    allowed_hosts=[
+        PUBLIC_HOST,
+        f"{PUBLIC_HOST}:443",
+        "127.0.0.1",
+        "127.0.0.1:*",
+        "localhost",
+        "localhost:*",
+    ],
+    allowed_origins=[
+        f"https://{PUBLIC_HOST}",
+        f"http://{PUBLIC_HOST}",
+    ],
+)
+
+mcp = FastMCP(
+    "vibes-coded-agent-tools",
+    transport_security=MCP_TRANSPORT_SECURITY,
+)
 
 _RO = ToolAnnotations(
     readOnlyHint=True, destructiveHint=False, idempotentHint=True, openWorldHint=False
