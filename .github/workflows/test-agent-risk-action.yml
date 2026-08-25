@@ -1,0 +1,45 @@
+name: "Test Agent Skill Risk Action"
+
+on:
+  push:
+    branches: ["main"]
+    paths:
+      - "action.yml"
+      - "skill_risk.py"
+      - "scripts/github_action_scan.py"
+      - "tests/**"
+      - ".github/workflows/test-agent-risk-action.yml"
+  pull_request:
+    paths:
+      - "action.yml"
+      - "skill_risk.py"
+      - "scripts/github_action_scan.py"
+      - "tests/**"
+      - ".github/workflows/test-agent-risk-action.yml"
+
+jobs:
+  test:
+    runs-on: "ubuntu-latest"
+    permissions:
+      contents: "read"
+    steps:
+      - name: "Checkout repository"
+        uses: "actions/checkout@v5"
+
+      - name: "Run Python test suite"
+        run: "python -m unittest discover -s tests -v"
+
+      - name: "Exercise the local composite Action"
+        id: "risk"
+        uses: "./"
+        with:
+          scan-path: "skills/agent-skill-risk-scan"
+          fail-on: "block"
+          report-path: "vibes-action-smoke-report.json"
+
+      - name: "Verify Action outputs and report"
+        shell: "bash"
+        run: |
+          test "${{ steps.risk.outputs.verdict }}" = "allow"
+          test -f "vibes-action-smoke-report.json"
+          python -c 'import json; d=json.load(open("vibes-action-smoke-report.json")); assert d["verdict"] == "allow"'

@@ -21,6 +21,8 @@ from urllib.parse import urlparse
 
 from pydantic import Field
 
+from skill_risk import scan_skill_risk
+
 logger = logging.getLogger("vibes-coded-mcp")
 logging.basicConfig(level=logging.INFO, stream=__import__("sys").stderr)
 os.environ.setdefault("PYTHONUNBUFFERED", "1")
@@ -767,51 +769,8 @@ _SKILL_RISK_RULES = (
 
 
 def _scan_skill_risk(content: str) -> dict:
-    """Deterministically scan skill/plugin text for high-risk capability patterns."""
-    if not isinstance(content, str) or not content.strip():
-        raise ValueError("content is empty")
-    if len(content) > 200_000:
-        raise ValueError("content exceeds 200000 characters")
-
-    findings = []
-    score = 0
-    for rule_id, severity, weight, pattern, explanation in _SKILL_RISK_RULES:
-        match = pattern.search(content)
-        if not match:
-            continue
-        score += weight
-        line_no = content.count("\n", 0, match.start()) + 1
-        line = content.splitlines()[line_no - 1].strip()[:180]
-        findings.append(
-            {
-                "rule_id": rule_id,
-                "severity": severity,
-                "weight": weight,
-                "line": line_no,
-                "evidence": line,
-                "explanation": explanation,
-            }
-        )
-
-    score = min(score, 100)
-    verdict = "block" if score >= 70 else "review" if score >= 30 else "allow"
-    return {
-        "ok": True,
-        "scanner": "vibes-coded-skill-risk/1",
-        "content_sha256": hashlib.sha256(content.encode("utf-8")).hexdigest(),
-        "characters_scanned": len(content),
-        "risk_score": score,
-        "verdict": verdict,
-        "findings": findings,
-        "recommendation": (
-            "Do not install or execute this skill until every critical/high finding is resolved."
-            if verdict == "block"
-            else "Require human review before installation."
-            if verdict == "review"
-            else "No known high-risk patterns found; provenance and signature checks are still recommended."
-        ),
-        "limitations": "Deterministic static scan; absence of findings is not proof of safety.",
-    }
+    """Backward-compatible wrapper for the dependency-light scanner module."""
+    return scan_skill_risk(content)
 
 
 def _reconcile_skill_scan_reports(reports: list[dict[str, Any]]) -> dict:

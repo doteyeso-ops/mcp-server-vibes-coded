@@ -1,0 +1,48 @@
+name: "Vibes-Coded Agent Skill Risk Scan"
+description: "Scan agent skills, MCP plugins, manifests, and installers for supply-chain and credential risks."
+author: "doteyeso-ops"
+
+branding:
+  icon: "shield"
+  color: "purple"
+
+inputs:
+  scan-path:
+    description: "File or directory to scan recursively."
+    required: false
+    default: "."
+  fail-on:
+    description: "Minimum verdict that fails the job: none, allow, review, or block."
+    required: false
+    default: "block"
+  report-path:
+    description: "Path for the deterministic JSON report."
+    required: false
+    default: "vibes-skill-risk-report.json"
+
+outputs:
+  verdict:
+    description: "Final allow, review, or block verdict."
+    value: "${{ steps.scan.outputs.verdict }}"
+  risk-score:
+    description: "Deterministic risk score from 0 to 100."
+    value: "${{ steps.scan.outputs.risk_score }}"
+  report-path:
+    description: "Absolute path to the generated JSON report."
+    value: "${{ steps.scan.outputs.report_path }}"
+
+runs:
+  using: "composite"
+  steps:
+    - name: "Run local agent dependency scan"
+      id: "scan"
+      shell: "bash"
+      env:
+        VIBES_SCAN_PATH: "${{ inputs.scan-path }}"
+        VIBES_FAIL_ON: "${{ inputs.fail-on }}"
+        VIBES_REPORT_PATH: "${{ inputs.report-path }}"
+      run: >-
+        python "$GITHUB_ACTION_PATH/scripts/github_action_scan.py"
+        --path "$VIBES_SCAN_PATH"
+        --fail-on "$VIBES_FAIL_ON"
+        --report "$VIBES_REPORT_PATH"

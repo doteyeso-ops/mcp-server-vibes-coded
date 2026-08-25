@@ -2,9 +2,7 @@
 
 # mcp-server-vibes-coded
 
-MCP server that exposes **Vibes-Coded pay-per-call x402 agent-tool endpoints** as
-discoverable MCP tools. Agents find this server on Glama / Smithery / the official
-MCP Registry, then call tools that proxy to `https://vibes-coded.com/api/v1/outcomes/{slug}`.
+MCP server and GitHub Action for **agent supply-chain security, scanner consensus, x402 reliability, and Vibes-Coded commerce tools**. Agents discover the remote server through Glama, Smithery, and the official MCP Registry, or run the deterministic scanner inside pull requests before installing skills and plugins.
 
 ## What it does
 
@@ -12,6 +10,8 @@ MCP Registry, then call tools that proxy to `https://vibes-coded.com/api/v1/outc
 
 | Tool | Purpose |
 |------|---------|
+| `vc_skill_risk_scan` | Deterministic skill/plugin supply-chain scan with evidence and verdict |
+| `vc_skill_scan_consensus` | Reconcile conflicting scanner reports conservatively |
 | `vc_web_search` | DuckDuckGo search → titles/URLs/snippets |
 | `vc_page_markdown` | Fetch URL → markdown |
 | `vc_json_repair` | Repair malformed LLM JSON |
@@ -33,9 +33,41 @@ Set `VIBES_MCP_FULL_CATALOG=1` to also register every live catalog slug (legacy;
 - **Human fund UI:** https://vibes-coded.com/start ($1 USDC → copy `X-Vibes-Key`).
 - **Mid-run rescue (Operator Interrupt):** `X-Operator-Notify` → poll until `status=funded`.
 
+## GitHub Action — PR-time agent dependency gate
+
+Scan changed agent skills, MCP plugins, manifests, installers, and source files locally in GitHub Actions. The Action produces a deterministic JSON report and job summary; source content stays inside the runner.
+
+```yaml
+name: Agent dependency security
+on: [pull_request]
+
+jobs:
+  scan:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v5
+      - id: agent-risk
+        uses: doteyeso-ops/mcp-server-vibes-coded@v1.6.1
+        with:
+          scan-path: .
+          fail-on: block
+          report-path: vibes-skill-risk-report.json
+      - run: echo "Verdict ${{ steps.agent-risk.outputs.verdict }}, score ${{ steps.agent-risk.outputs.risk-score }}"
+```
+
+Inputs:
+
+- `scan-path` — one file or a recursively scanned directory.
+- `fail-on` — `none`, `allow`, `review`, or `block` (default `block`).
+- `report-path` — JSON evidence report destination.
+
+Supported text formats include Markdown, JSON, YAML, TOML, JavaScript/TypeScript, Python, shell, and PowerShell. `.git`, virtual environments, build outputs, and `node_modules` are excluded. Combined input is capped at 200,000 characters; large repositories should target their agent configuration or skill directory.
+
 ## Install
 
-**Hosted (no install):** `https://mcp-vibes-coded-production.up.railway.app/mcp`  
+**Hosted (no install):** `https://vibes-coded-mcp-production.up.railway.app/mcp`
 Pointer: `https://vibes-coded.com/.well-known/mcp.json` · Smithery: `https://smithery.ai/servers/vibes-coded/vibes-coded-agent-tools`
 
 ```bash
