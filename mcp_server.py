@@ -9,6 +9,7 @@ Hosted HTTP:  MCP_TRANSPORT=streamable-http PORT=3000 python mcp_server.py
 from __future__ import annotations
 
 import hashlib
+import hmac
 import json
 import logging
 import os
@@ -34,7 +35,7 @@ PUBLIC_ORIGIN = "https://vibes-coded.com"
 # notepad, attest/reputation, passes). The slim x402.json is featured-only (64)
 # and omits the ecosystem tools agents need to discover.
 WELLKNOWN_URL = f"{ORIGIN}/.well-known/x402-marketplace.json"
-VERSION = "1.4.0"
+VERSION = "1.5.0"
 
 PUBLIC_HOST = os.getenv(
     "MCP_PUBLIC_HOST", "vibes-coded-mcp-production.up.railway.app"
@@ -1033,6 +1034,104 @@ def health() -> str:
     )
 
 
+def _provider_gateway_authorized(headers: Any, expected_secret: str | None) -> bool:
+    """Authenticate trusted marketplace proxies; fail closed when unconfigured."""
+    expected = str(expected_secret or "").strip()
+    if not expected:
+        return False
+    lowered = {str(key).lower(): str(value) for key, value in dict(headers).items()}
+    supplied = lowered.get("x-rapidapi-proxy-secret") or lowered.get("x-vibes-provider-key")
+    return bool(supplied) and hmac.compare_digest(supplied, expected)
+
+
+def _agent_security_openapi() -> dict:
+    report_schema = {
+        "type": "object",
+        "properties": {
+            "scanner": {"type": "string"},
+            "verdict": {"type": "string", "enum": ["allow", "review", "block"]},
+            "risk_score": {"type": "number", "minimum": 0, "maximum": 100},
+            "findings": {"type": "array", "items": {"type": "object"}},
+        },
+        "required": ["scanner", "verdict"],
+    }
+    return {
+        "openapi": "3.1.0",
+        "info": {
+            "title": "Vibes-Coded Agent Security API",
+            "version": VERSION,
+            "description": "Focused agent-skill security scanning and multi-scanner consensus API.",
+        },
+        "servers": [{"url": f"https://{PUBLIC_HOST}"}],
+        "paths": {
+            "/api/v1/agent-security/scan": {
+                "post": {
+                    "summary": "Scan agent skill or plugin text",
+                    "operationId": "scanAgentSkill",
+                    "security": [{"ProviderProxySecret": []}],
+                    "requestBody": {
+                        "required": True,
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {"content": {"type": "string", "maxLength": 200000}},
+                                    "required": ["content"],
+                                }
+                            }
+                        },
+                    },
+                    "responses": {
+                        "200": {"description": "Risk report"},
+                        "400": {"description": "Invalid input"},
+                        "401": {"description": "Missing or invalid provider proxy secret"},
+                    },
+                }
+            },
+            "/api/v1/agent-security/consensus": {
+                "post": {
+                    "summary": "Reconcile two to ten scanner reports",
+                    "operationId": "reconcileAgentSkillScanners",
+                    "security": [{"ProviderProxySecret": []}],
+                    "requestBody": {
+                        "required": True,
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "reports": {
+                                            "type": "array",
+                                            "minItems": 2,
+                                            "maxItems": 10,
+                                            "items": report_schema,
+                                        }
+                                    },
+                                    "required": ["reports"],
+                                }
+                            }
+                        },
+                    },
+                    "responses": {
+                        "200": {"description": "Consensus report"},
+                        "400": {"description": "Invalid input"},
+                        "401": {"description": "Missing or invalid provider proxy secret"},
+                    },
+                }
+            },
+        },
+        "components": {
+            "securitySchemes": {
+                "ProviderProxySecret": {
+                    "type": "apiKey",
+                    "in": "header",
+                    "name": "X-RapidAPI-Proxy-Secret",
+                }
+            }
+        },
+    }
+
+
 def _attach_http_routes(app) -> None:
     from starlette.responses import JSONResponse, PlainTextResponse
     from starlette.routing import Route
@@ -1070,13 +1169,55 @@ def _attach_http_routes(app) -> None:
             }
         )
 
+    async def _provider_scan(request):
+        if not _provider_gateway_authorized(
+            request.headers, os.getenv("PROVIDER_PROXY_SECRET")
+        ):
+            return JSONResponse({"ok": False, "error": "unauthorized"}, status_code=401)
+        try:
+            body = await request.json()
+            result = _scan_skill_risk(body.get("content") if isinstance(body, dict) else None)
+            return JSONResponse(result)
+        except ValueError as exc:
+            return JSONResponse({"ok": False, "error": str(exc)}, status_code=400)
+        except Exception:
+            logger.exception("provider scan failed")
+            return JSONResponse({"ok": False, "error": "internal_error"}, status_code=500)
+
+    async def _provider_consensus(request):
+        if not _provider_gateway_authorized(
+            request.headers, os.getenv("PROVIDER_PROXY_SECRET")
+        ):
+            return JSONResponse({"ok": False, "error": "unauthorized"}, status_code=401)
+        try:
+            body = await request.json()
+            result = _reconcile_skill_scan_reports(
+                body.get("reports") if isinstance(body, dict) else None
+            )
+            return JSONResponse(result)
+        except ValueError as exc:
+            return JSONResponse({"ok": False, "error": str(exc)}, status_code=400)
+        except Exception:
+            logger.exception("provider consensus failed")
+            return JSONResponse({"ok": False, "error": "internal_error"}, status_code=500)
+
+    def _provider_openapi(_request):
+        return JSONResponse(_agent_security_openapi())
+
     for path, handler in (
         ("/health", _health),
         ("/healthz", _ready),
         ("/", _ready),
         ("/.well-known/mcp/server-card.json", _server_card),
+        ("/api/v1/agent-security/openapi.json", _provider_openapi),
     ):
         app.router.routes.insert(0, Route(path, handler, methods=["GET"]))
+
+    for path, handler in (
+        ("/api/v1/agent-security/scan", _provider_scan),
+        ("/api/v1/agent-security/consensus", _provider_consensus),
+    ):
+        app.router.routes.insert(0, Route(path, handler, methods=["POST"]))
 
 
 def main() -> None:
