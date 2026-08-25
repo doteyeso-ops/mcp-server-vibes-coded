@@ -10,7 +10,7 @@ COPY requirements.txt ./
 RUN python -m pip install --no-cache-dir --upgrade pip \
   && python -m pip install --no-cache-dir -r requirements.txt
 
-COPY mcp_server.py pyproject.toml README.md LICENSE ./
+COPY mcp_server.py skill_risk.py pyproject.toml README.md LICENSE ./
 
 # Official MCP Registry ownership marker for OCI packages
 LABEL io.modelcontextprotocol.server.name="io.github.doteyeso-ops/mcp-server-vibes-coded"

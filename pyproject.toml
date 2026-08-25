@@ -1,10 +1,10 @@
 [project]
 name = "mcp-server-vibes-coded"
-version = "1.2.0"
-description = "MCP server exposing curated Vibes-Coded x402 agent tools (search, scrape, JSON repair, reliability guards) with TDQS-friendly schemas."
+version = "1.6.1"
+description = "MCP server and GitHub Action for agent supply-chain security, scanner consensus, x402 reliability, and commerce tools."
 readme = "README.md"
 requires-python = ">=3.10"
-license = { text = "MIT" }
+license = "MIT"
 authors = [{ name = "doteyeso-ops" }]
 keywords = ["mcp", "x402", "agents", "solana", "vibes-coded"]
 dependencies = [
@@ -27,7 +27,7 @@ requires = ["setuptools>=61.0"]
 build-backend = "setuptools.build_meta"
 
 [tool.setuptools]
-py-modules = ["mcp_server"]
+py-modules = ["mcp_server", "skill_risk"]
 
 [tool.mcp]
 name = "vibes-coded-agent-tools"

@@ -37,7 +37,7 @@ PUBLIC_ORIGIN = "https://vibes-coded.com"
 # notepad, attest/reputation, passes). The slim x402.json is featured-only (64)
 # and omits the ecosystem tools agents need to discover.
 WELLKNOWN_URL = f"{ORIGIN}/.well-known/x402-marketplace.json"
-VERSION = "1.6.0"
+VERSION = "1.6.1"
 
 PUBLIC_HOST = os.getenv(
     "MCP_PUBLIC_HOST", "vibes-coded-mcp-production.up.railway.app"
