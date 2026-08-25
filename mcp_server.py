@@ -35,7 +35,7 @@ PUBLIC_ORIGIN = "https://vibes-coded.com"
 # notepad, attest/reputation, passes). The slim x402.json is featured-only (64)
 # and omits the ecosystem tools agents need to discover.
 WELLKNOWN_URL = f"{ORIGIN}/.well-known/x402-marketplace.json"
-VERSION = "1.5.0"
+VERSION = "1.6.0"
 
 PUBLIC_HOST = os.getenv(
     "MCP_PUBLIC_HOST", "vibes-coded-mcp-production.up.railway.app"
@@ -1201,6 +1201,30 @@ def _attach_http_routes(app) -> None:
             logger.exception("provider consensus failed")
             return JSONResponse({"ok": False, "error": "internal_error"}, status_code=500)
 
+    async def _okx_scan(request):
+        try:
+            body = await request.json()
+            result = _scan_skill_risk(body.get("content") if isinstance(body, dict) else None)
+            return JSONResponse({"ok": True, "result": result})
+        except ValueError as exc:
+            return JSONResponse({"ok": False, "error": str(exc)}, status_code=400)
+        except Exception:
+            logger.exception("OKX scan failed")
+            return JSONResponse({"ok": False, "error": "internal_error"}, status_code=500)
+
+    async def _okx_consensus(request):
+        try:
+            body = await request.json()
+            result = _reconcile_skill_scan_reports(
+                body.get("reports") if isinstance(body, dict) else None
+            )
+            return JSONResponse({"ok": True, "result": result})
+        except ValueError as exc:
+            return JSONResponse({"ok": False, "error": str(exc)}, status_code=400)
+        except Exception:
+            logger.exception("OKX consensus failed")
+            return JSONResponse({"ok": False, "error": "internal_error"}, status_code=500)
+
     def _provider_openapi(_request):
         return JSONResponse(_agent_security_openapi())
 
@@ -1216,6 +1240,8 @@ def _attach_http_routes(app) -> None:
     for path, handler in (
         ("/api/v1/agent-security/scan", _provider_scan),
         ("/api/v1/agent-security/consensus", _provider_consensus),
+        ("/api/v1/agent-security/okx/scan", _okx_scan),
+        ("/api/v1/agent-security/okx/consensus", _okx_consensus),
     ):
         app.router.routes.insert(0, Route(path, handler, methods=["POST"]))
 
