@@ -39,8 +39,10 @@ PUBLIC_ORIGIN = "https://vibes-coded.com"
 WELLKNOWN_URL = f"{ORIGIN}/.well-known/x402-marketplace.json"
 VERSION = "1.6.1"
 
-PUBLIC_HOST = os.getenv(
-    "MCP_PUBLIC_HOST", "vibes-coded-mcp-production.up.railway.app"
+PUBLIC_HOST = (
+    os.getenv("MCP_PUBLIC_HOST")
+    or os.getenv("RAILWAY_PUBLIC_DOMAIN")
+    or "mcp-vibes-coded-production.up.railway.app"
 )
 MCP_TRANSPORT_SECURITY = TransportSecuritySettings(
     enable_dns_rebinding_protection=True,
