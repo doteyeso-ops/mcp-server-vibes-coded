@@ -8,11 +8,15 @@
     "url": "https://github.com/doteyeso-ops/mcp-server-vibes-coded",
     "source": "github"
   },
-  "version": "1.7.0",
+  "version": "1.7.1",
   "remotes": [
     {
       "type": "streamable-http",
       "url": "https://vibes-coded-mcp-production.up.railway.app/mcp"
+    },
+    {
+      "type": "streamable-http",
+      "url": "https://mcp-vibes-coded-production.up.railway.app/mcp"
     }
   ]
 }

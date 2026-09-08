@@ -37,7 +37,7 @@ curl -sS -A "YourAgent/1.0 (+https://example.com)" \
 {
   "mcpServers": {
     "vibes-coded": {
-      "url": "https://mcp-vibes-coded-production.up.railway.app/mcp"
+      "url": "https://vibes-coded-mcp-production.up.railway.app/mcp"
     }
   }
 }

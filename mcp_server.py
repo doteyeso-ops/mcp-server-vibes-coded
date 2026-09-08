@@ -38,7 +38,7 @@ PUBLIC_ORIGIN = "https://vibes-coded.com"
 # notepad, attest/reputation, passes). The slim x402.json is featured-only (64)
 # and omits the ecosystem tools agents need to discover.
 WELLKNOWN_URL = f"{ORIGIN}/.well-known/x402-marketplace.json"
-VERSION = "1.7.0"
+VERSION = "1.7.1"
 
 PUBLIC_HOST = (
     os.getenv("MCP_PUBLIC_HOST")
@@ -173,6 +173,7 @@ def _claim_trial(session_id: str) -> str | None:
 
 
 def _call_resource(path: str, payload: dict, payment_sig: str | None = None) -> dict:
+    global _runtime_key, _trial_attempted
     url = path if path.startswith("http") else f"{ORIGIN}{path}"
 
     def _post(extra_key: str | None = None) -> dict:
@@ -205,7 +206,6 @@ def _call_resource(path: str, payload: dict, payment_sig: str | None = None) -> 
 
     result = _post()
     if _looks_402(result) and not _is_hosted_transport() and not payment_sig:
-        global _trial_attempted
         should = False
         with _runtime_key_lock:
             env_key = os.getenv("VIBES_KEY") or os.getenv("X_VIBES_KEY")
@@ -216,7 +216,6 @@ def _call_resource(path: str, payload: dict, payment_sig: str | None = None) -> 
             claimed = _claim_trial(f"mcp-stdio-{os.getpid()}")
             if claimed:
                 with _runtime_key_lock:
-                    global _runtime_key
                     _runtime_key = claimed
                 result = _post(claimed)
     if _looks_402(result):
