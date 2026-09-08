@@ -31,6 +31,7 @@ Set `VIBES_MCP_FULL_CATALOG=1` to also register every live catalog slug (legacy;
 
 - Paid calls settle USDC via x402 (HTTP 402 → pay → retry), or use prepaid `X-Vibes-Key` / day-pass.
 - **Human fund UI:** https://vibes-coded.com/start ($1 USDC → copy `X-Vibes-Key`).
+- **IDE sidecar (v1.7.0):** tool results include `print_to_user` on 402 — show it to the human. Local stdio auto-claims a smoke trial once. Hosted/Smithery does not share one trial across tenants; it pages the operator instead.
 - **Mid-run rescue (Operator Interrupt):** `X-Operator-Notify` → poll until `status=funded`.
 
 ## GitHub Action — PR-time agent dependency gate

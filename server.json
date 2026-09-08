@@ -8,7 +8,7 @@
     "url": "https://github.com/doteyeso-ops/mcp-server-vibes-coded",
     "source": "github"
   },
-  "version": "1.6.1",
+  "version": "1.7.0",
   "remotes": [
     {
       "type": "streamable-http",

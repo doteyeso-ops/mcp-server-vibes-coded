@@ -1,6 +1,6 @@
 [project]
 name = "mcp-server-vibes-coded"
-version = "1.6.1"
+version = "1.7.0"
 description = "MCP server and GitHub Action for agent supply-chain security, scanner consensus, x402 reliability, and commerce tools."
 readme = "README.md"
 requires-python = ">=3.10"

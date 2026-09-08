@@ -14,6 +14,7 @@ import json
 import logging
 import os
 import re
+import threading
 import urllib.error
 import urllib.request
 from typing import Any
@@ -37,7 +38,7 @@ PUBLIC_ORIGIN = "https://vibes-coded.com"
 # notepad, attest/reputation, passes). The slim x402.json is featured-only (64)
 # and omits the ecosystem tools agents need to discover.
 WELLKNOWN_URL = f"{ORIGIN}/.well-known/x402-marketplace.json"
-VERSION = "1.6.1"
+VERSION = "1.7.0"
 
 PUBLIC_HOST = (
     os.getenv("MCP_PUBLIC_HOST")
@@ -60,10 +61,23 @@ MCP_TRANSPORT_SECURITY = TransportSecuritySettings(
     ],
 )
 
-mcp = FastMCP(
-    "vibes-coded-agent-tools",
-    transport_security=MCP_TRANSPORT_SECURITY,
+_INSTRUCTIONS = (
+    "When a tool returns print_to_user, show that exact text to the human in chat. "
+    "Do not keep retrying wallet signatures. Human fund: https://vibes-coded.com/start "
+    "($1 USDC → paste vb_ key as env VIBES_KEY). Local stdio auto-claims a smoke trial once."
 )
+
+try:
+    mcp = FastMCP(
+        "vibes-coded-agent-tools",
+        instructions=_INSTRUCTIONS,
+        transport_security=MCP_TRANSPORT_SECURITY,
+    )
+except TypeError:
+    mcp = FastMCP(
+        "vibes-coded-agent-tools",
+        transport_security=MCP_TRANSPORT_SECURITY,
+    )
 
 _RO = ToolAnnotations(
     readOnlyHint=True, destructiveHint=False, idempotentHint=True, openWorldHint=False
@@ -90,31 +104,124 @@ def _endpoint_path(res: dict) -> str:
     return p
 
 
-def _call_resource(path: str, payload: dict, payment_sig: str | None = None) -> dict:
-    url = path if path.startswith("http") else f"{ORIGIN}{path}"
-    body = json.dumps(payload or {}).encode()
+_runtime_key_lock = threading.Lock()
+_runtime_key: str | None = None
+_trial_attempted = False
+
+
+def _is_hosted_transport() -> bool:
+    t = (os.getenv("MCP_TRANSPORT") or "").strip().lower()
+    return t in ("streamable-http", "sse", "http") or bool(os.getenv("PORT"))
+
+
+def _looks_402(result: Any) -> bool:
+    if not isinstance(result, dict):
+        return False
+    if result.get("x402Version") is not None:
+        return True
+    if result.get("payment_required") is True:
+        return True
+    return "402" in str(result.get("error") or "")
+
+
+def _page_human_payload(result: dict) -> dict:
+    ois = result.get("operator_interrupt") if isinstance(result, dict) else None
+    fund = None
+    if isinstance(ois, dict):
+        fund = (ois.get("fund_url") or "").strip() or None
+    fund = fund or f"{PUBLIC_ORIGIN}/start"
+    print_to = result.get("print_to_user") if isinstance(result, dict) else None
+    if not print_to:
+        print_to = (
+            f"Please open {fund} and pay $1 USDC, then paste the vb_ key back here "
+            "(env VIBES_KEY / header X-Vibes-Key). I cannot sign a wallet."
+        )
+    return {
+        "payment_required": True,
+        "print_to_user": print_to,
+        "human_fund": fund,
+        "preferred": {"human_fund": fund, "header": "X-Vibes-Key"},
+        "raw_challenge": result if isinstance(result, dict) else {"error": str(result)[:500]},
+        "note": "Show print_to_user to the human. Do not retry wallet signing.",
+    }
+
+
+def _claim_trial(session_id: str) -> str | None:
+    url = f"{ORIGIN}/api/v1/outcomes/balance/trial/claim"
+    body = json.dumps({"agent_id": session_id[:128]}).encode()
     headers = {
         "Content-Type": "application/json",
         "User-Agent": f"vibes-coded-mcp/{VERSION}",
+        "X-Vibes-Mcp-Session": session_id[:128],
     }
-    if payment_sig:
-        headers["PAYMENT-SIGNATURE"] = payment_sig
-    key = os.getenv("VIBES_KEY") or os.getenv("X_VIBES_KEY")
-    if key:
-        headers["X-Vibes-Key"] = key
-    day = os.getenv("VIBES_DAY_PASS") or os.getenv("X_DAY_PASS")
-    if day:
-        headers["X-Day-Pass"] = day
     req = urllib.request.Request(url, data=body, headers=headers, method="POST")
     try:
-        with urllib.request.urlopen(req, timeout=60) as r:
-            return json.loads(r.read().decode())
+        with urllib.request.urlopen(req, timeout=30) as r:
+            data = json.loads(r.read().decode())
     except urllib.error.HTTPError as e:
-        raw = e.read().decode()
         try:
-            return json.loads(raw)
+            data = json.loads(e.read().decode())
         except Exception:
-            return {"error": f"HTTP {e.code}", "detail": raw[:500]}
+            return None
+    except Exception:
+        logger.info("trial claim failed", exc_info=True)
+        return None
+    key = data.get("key") if isinstance(data, dict) else None
+    if isinstance(key, str) and key.startswith("vb_"):
+        return key
+    return None
+
+
+def _call_resource(path: str, payload: dict, payment_sig: str | None = None) -> dict:
+    url = path if path.startswith("http") else f"{ORIGIN}{path}"
+
+    def _post(extra_key: str | None = None) -> dict:
+        body = json.dumps(payload or {}).encode()
+        headers = {
+            "Content-Type": "application/json",
+            "User-Agent": f"vibes-coded-mcp/{VERSION}",
+        }
+        if payment_sig:
+            headers["PAYMENT-SIGNATURE"] = payment_sig
+        key = extra_key or os.getenv("VIBES_KEY") or os.getenv("X_VIBES_KEY")
+        if not key:
+            with _runtime_key_lock:
+                key = _runtime_key
+        if key:
+            headers["X-Vibes-Key"] = key
+        day = os.getenv("VIBES_DAY_PASS") or os.getenv("X_DAY_PASS")
+        if day:
+            headers["X-Day-Pass"] = day
+        req = urllib.request.Request(url, data=body, headers=headers, method="POST")
+        try:
+            with urllib.request.urlopen(req, timeout=60) as r:
+                return json.loads(r.read().decode())
+        except urllib.error.HTTPError as e:
+            raw = e.read().decode()
+            try:
+                return json.loads(raw)
+            except Exception:
+                return {"error": f"HTTP {e.code}", "detail": raw[:500]}
+
+    result = _post()
+    if _looks_402(result) and not _is_hosted_transport() and not payment_sig:
+        global _trial_attempted
+        should = False
+        with _runtime_key_lock:
+            env_key = os.getenv("VIBES_KEY") or os.getenv("X_VIBES_KEY")
+            if not _trial_attempted and not env_key and not _runtime_key:
+                should = True
+            _trial_attempted = True
+        if should:
+            claimed = _claim_trial(f"mcp-stdio-{os.getpid()}")
+            if claimed:
+                with _runtime_key_lock:
+                    global _runtime_key
+                    _runtime_key = claimed
+                result = _post(claimed)
+    if _looks_402(result):
+        return _page_human_payload(result)
+    return result
 
 
 def _outcome(slug: str, payload: dict, payment_signature: str | None = None) -> str:
