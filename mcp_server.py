@@ -38,7 +38,7 @@ PUBLIC_ORIGIN = "https://vibes-coded.com"
 # notepad, attest/reputation, passes). The slim x402.json is featured-only (64)
 # and omits the ecosystem tools agents need to discover.
 WELLKNOWN_URL = f"{ORIGIN}/.well-known/x402-marketplace.json"
-VERSION = "1.7.1"
+VERSION = "1.7.2"
 
 PUBLIC_HOST = (
     os.getenv("MCP_PUBLIC_HOST")
@@ -291,6 +291,105 @@ def vc_json_repair(
     Returns repaired JSON, or payment_required.
     """
     return _outcome("json-repair", {"text": text}, payment_signature)
+
+
+@mcp.tool(annotations=_RO)
+def vc_agent_proof(
+    claim: str = Field(description="What the agent claims it did (its final report)."),
+    checks_json: str = Field(
+        default="[]",
+        description='JSON array of read-back checks, e.g. [{"name":"homepage live","url":"https://example.com/","expected_status":200,"contains":"Example"}]',
+    ),
+    agent_id: str | None = Field(default=None, description="Stable id for the agent being verified."),
+    payment_signature: str | None = Field(default=None, description="Optional x402 PAYMENT-SIGNATURE if not using X-Vibes-Key."),
+) -> str:
+    """Verify an agent's completion claim against real external world state.
+    Runs independent read-back checks (HTTP status, page text, JSON fields) and returns a digest
+    receipt with verified=true/false plus a confidence score, so a user does not have to trust the
+    agent's self-reported summary. Use after an agent says it posted, deployed, paid, emailed or
+    changed a record. ~$0.25/call.
+    """
+    try:
+        checks = json.loads(checks_json) if isinstance(checks_json, str) else checks_json
+    except json.JSONDecodeError as exc:
+        return json.dumps({"error": f"checks_json is not valid JSON: {exc}"}, indent=2)
+    if not isinstance(checks, list):
+        return json.dumps({"error": "checks_json must be a JSON array of check objects"}, indent=2)
+    payload: dict = {"claim": claim, "checks": checks}
+    if agent_id:
+        payload["agent_id"] = agent_id
+    return _outcome("agent-proof", payload, payment_signature)
+
+
+@mcp.tool(annotations=_RO)
+def vc_lease_issue(
+    holder: str = Field(description="Agent the authority belongs to. Use '*' for any holder."),
+    action_scope: str = Field(description="Space-separated scope atoms the lease grants, e.g. 'read:repo write:issue'."),
+    max_uses: int = Field(default=1, description="How many times this authority may be spent (1..10000)."),
+    ttl_seconds: int = Field(default=3600, description="Seconds until expiry. Secondary check only: the ledger is the authority."),
+    parent_lease_id: str | None = Field(default=None, description="Attenuate from this parent: child scope must be a subset, and its uses are transferred out of the parent."),
+    payment_signature: str | None = Field(default=None, description="Optional x402 PAYMENT-SIGNATURE if not using X-Vibes-Key."),
+) -> str:
+    """Mint a durable single-use capability lease, or attenuate a parent lease.
+    Use before an irreversible action you may need to retry: pass a stable use_nonce to
+    vc_lease_consume so a retry after a timeout blocks instead of writing twice.
+    Authority is conserved — a child's uses are reserved out of the parent, so a 1-use grant
+    cannot father N free children. ~$0.05/call.
+    """
+    payload: dict = {
+        "holder": holder,
+        "action_scope": action_scope,
+        "max_uses": max_uses,
+        "ttl_seconds": ttl_seconds,
+    }
+    if parent_lease_id:
+        payload["parent_lease_id"] = parent_lease_id
+    return _outcome("lease-issue", payload, payment_signature)
+
+
+@mcp.tool(annotations=_RO)
+def vc_lease_consume(
+    use_nonce: str = Field(description="Stable id for this attempt (the replay key). Reuse the SAME nonce on retry."),
+    lease_id: str | None = Field(default=None, description="Lease to spend from."),
+    lease_token: str | None = Field(default=None, description="Signed lease token from vc_lease_issue (alternative to lease_id)."),
+    agent_id: str | None = Field(default=None, description="Caller identity; must match the lease holder unless it was issued to '*'."),
+    action: str | None = Field(default=None, description="What you are about to do, for the ledger trail."),
+    payment_signature: str | None = Field(default=None, description="Optional x402 PAYMENT-SIGNATURE if not using X-Vibes-Key."),
+) -> str:
+    """Spend exactly one use of a lease, atomically. Blocks replay, expiry, revocation and overuse.
+    Returns decision allow/block with a named reason plus an Ed25519 decision receipt.
+    If a previous attempt timed out, call this again with the SAME use_nonce: a replay returns
+    reason=replay — do not retry the write, reconcile it. ~$0.02/call.
+    """
+    payload: dict = {"use_nonce": use_nonce}
+    for key, value in (("lease_id", lease_id), ("lease_token", lease_token), ("agent_id", agent_id), ("action", action)):
+        if value:
+            payload[key] = value
+    return _outcome("lease-consume", payload, payment_signature)
+
+
+@mcp.tool(annotations=_RO)
+def vc_lease_revoke(
+    lease_id: str = Field(description="Lease to revoke."),
+    reason: str | None = Field(default=None, description="Why authority is being withdrawn (kept in the ledger)."),
+    cascade: bool = Field(default=True, description="Also revoke every descendant lease."),
+    payment_signature: str | None = Field(default=None, description="Optional x402 PAYMENT-SIGNATURE if not using X-Vibes-Key."),
+) -> str:
+    """Revoke a lease and (by default) its whole subtree so derived authority dies with its source.
+    Use when an agent is misbehaving or a task is cancelled. ~$0.02/call.
+    """
+    return _outcome("lease-revoke", {"lease_id": lease_id, "reason": reason, "cascade": cascade}, payment_signature)
+
+
+@mcp.tool(annotations=_RO)
+def vc_lease_status(
+    lease_id: str = Field(description="Lease to inspect."),
+    payment_signature: str | None = Field(default=None, description="Optional x402 PAYMENT-SIGNATURE if not using X-Vibes-Key."),
+) -> str:
+    """Read the ledger's view of a lease: uses consumed with nonces/timestamps, remaining authority,
+    and whether it is live, expired or revoked. ~$0.01/call.
+    """
+    return _outcome("lease-status", {"lease_id": lease_id}, payment_signature)
 
 
 @mcp.tool(annotations=_RO)
