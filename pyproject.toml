@@ -1,6 +1,6 @@
 [project]
 name = "mcp-server-vibes-coded"
-version = "1.7.2"
+version = "1.8.0"
 description = "MCP server and GitHub Action for agent supply-chain security, scanner consensus, x402 reliability, and commerce tools."
 readme = "README.md"
 requires-python = ">=3.10"
@@ -27,7 +27,7 @@ requires = ["setuptools>=61.0"]
 build-backend = "setuptools.build_meta"
 
 [tool.setuptools]
-py-modules = ["mcp_server", "skill_risk"]
+py-modules = ["mcp_server", "skill_risk", "chatgpt_marketplace"]
 
 [tool.mcp]
 name = "vibes-coded-agent-tools"

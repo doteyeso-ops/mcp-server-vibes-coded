@@ -38,7 +38,7 @@ PUBLIC_ORIGIN = "https://vibes-coded.com"
 # notepad, attest/reputation, passes). The slim x402.json is featured-only (64)
 # and omits the ecosystem tools agents need to discover.
 WELLKNOWN_URL = f"{ORIGIN}/.well-known/x402-marketplace.json"
-VERSION = "1.7.2"
+VERSION = "1.8.0"
 
 PUBLIC_HOST = (
     os.getenv("MCP_PUBLIC_HOST")
@@ -853,6 +853,16 @@ try:
 except Exception as _e:
     logger.warning("catalog fetch failed at startup: %s", _e)
     RESOURCES = []
+
+# ChatGPT/plugin discovery layer. These tools search the already-loaded,
+# bounded Vibes-Coded catalog and do not execute or purchase outcomes.
+from chatgpt_marketplace import register_chatgpt_marketplace_tools
+
+register_chatgpt_marketplace_tools(
+    mcp,
+    RESOURCES,
+    public_origin=PUBLIC_ORIGIN,
+)
 
 _CURATED_SLUGS = {
     "web-search",
