@@ -5,9 +5,8 @@ import math
 import re
 from typing import Any
 
-from pydantic import Field
 from mcp.types import ToolAnnotations
-
+from pydantic import Field
 
 READ_ONLY = ToolAnnotations(
     readOnlyHint=True,
@@ -17,23 +16,71 @@ READ_ONLY = ToolAnnotations(
 )
 
 _TOKEN_RE = re.compile(r"[a-z0-9]+", re.I)
+_SECRET_KEY_RE = re.compile(r"(secret|token|api[_-]?key|private[_-]?key|password|credential)", re.I)
+_STOPWORDS = {
+    "a",
+    "an",
+    "and",
+    "as",
+    "for",
+    "find",
+    "me",
+    "of",
+    "on",
+    "or",
+    "something",
+    "that",
+    "the",
+    "to",
+    "tool",
+    "under",
+    "with",
+}
+_SYNONYMS = {
+    "broken": {"malformed", "invalid", "repair", "fix"},
+    "fix": {"repair", "validate", "valid"},
+    "safe": {"safety", "guard", "verify", "verification"},
+    "safety": {"guard", "risk", "verify", "verification"},
+    "schema": {"structured", "validate", "validation"},
+    "structured": {"schema", "json", "validate"},
+    "verify": {"proof", "guard", "attest", "validation"},
+}
 
 
-def _tokens(value: str | None) -> list[str]:
-    return [m.group(0).lower() for m in _TOKEN_RE.finditer(str(value or ""))]
+def _tokens(value: Any) -> list[str]:
+    tokens = [m.group(0).lower() for m in _TOKEN_RE.finditer(str(value or ""))]
+    return [t for t in tokens if t not in _STOPWORDS]
+
+
+def _expanded_tokens(value: Any) -> list[str]:
+    expanded: set[str] = set()
+    for token in _tokens(value):
+        expanded.add(token)
+        if token.endswith("s") and len(token) > 3:
+            expanded.add(token[:-1])
+        if token.endswith("ing") and len(token) > 5:
+            expanded.add(token[:-3])
+        expanded.update(_SYNONYMS.get(token, set()))
+    return sorted(expanded)
+
+
+def _slug_from_url(value: Any) -> str:
+    if not isinstance(value, str) or not value:
+        return ""
+    path = value.split("?", 1)[0].rstrip("/")
+    return path.rsplit("/", 1)[-1]
 
 
 def _slug(resource: dict[str, Any]) -> str:
-    return str(
-        resource.get("id")
-        or resource.get("x-canonical-slug")
-        or resource.get("slug")
-        or ""
-    ).strip()
+    value = resource.get("id") or resource.get("x-canonical-slug") or resource.get("slug")
+    if not value:
+        value = _slug_from_url(resource.get("url") or resource.get("href") or resource.get("path"))
+    return str(value or "").strip().strip("/")
 
 
 def _title(resource: dict[str, Any]) -> str:
-    return str(resource.get("title") or resource.get("name") or _slug(resource)).strip()
+    slug = _slug(resource)
+    return str(resource.get("title") or resource.get("name") or slug).strip()
 
 
 def _description(resource: dict[str, Any]) -> str:
@@ -41,19 +88,27 @@ def _description(resource: dict[str, Any]) -> str:
 
 
 def _category(resource: dict[str, Any]) -> str:
-    raw = resource.get("category") or resource.get("type") or resource.get("group") or ""
+    raw = resource.get("category") or resource.get("type") or resource.get("group") or resource.get("pack") or ""
     if isinstance(raw, list):
         return ", ".join(str(x) for x in raw if x)
     return str(raw).strip()
 
 
 def _price_usd(resource: dict[str, Any]) -> float | None:
-    price = resource.get("price")
+    if resource.get("price_cents") not in (None, ""):
+        try:
+            return float(resource["price_cents"]) / 100.0
+        except (TypeError, ValueError):
+            pass
+
+    price: Any = resource.get("price")
     if isinstance(price, dict):
-        for key in ("amount", "usd", "price_usd", "value"):
-            if key in price:
+        for key in ("usd", "price_usd", "amount", "value"):
+            if key in price and price[key] not in (None, ""):
                 price = price[key]
                 break
+        else:
+            price = None
 
     if price in (None, ""):
         price = resource.get("price_usd")
@@ -106,6 +161,13 @@ def _resource_url(resource: dict[str, Any], public_origin: str) -> str:
     return public_origin.rstrip("/")
 
 
+def _execution_tool(resource: dict[str, Any]) -> str:
+    slug = _slug(resource)
+    if not slug:
+        return "pay"
+    return "vc_" + re.sub(r"[^a-z0-9_]+", "_", slug.lower()).strip("_")
+
+
 def _search_text(resource: dict[str, Any]) -> str:
     fields = [
         _slug(resource),
@@ -125,22 +187,23 @@ def _search_text(resource: dict[str, Any]) -> str:
 
 
 def _score(resource: dict[str, Any], query: str) -> float:
-    q_tokens = _tokens(query)
+    q_tokens = _expanded_tokens(query)
     if not q_tokens:
         return 1.0
 
     slug = _slug(resource).lower()
+    slug_words = slug.replace("-", "_").replace("_", " ")
     title = _title(resource).lower()
     description = _description(resource).lower()
     category = _category(resource).lower()
     haystack = _search_text(resource)
 
     score = 0.0
-    phrase = " ".join(q_tokens)
+    phrase = " ".join(_tokens(query))
 
     if phrase and phrase in title:
         score += 20
-    if phrase and phrase in slug.replace("-", " "):
+    if phrase and phrase in slug_words:
         score += 18
     if phrase and phrase in description:
         score += 10
@@ -148,7 +211,7 @@ def _score(resource: dict[str, Any], query: str) -> float:
     for token in q_tokens:
         if token in title:
             score += 8
-        if token in slug:
+        if token in slug or token in slug_words:
             score += 7
         if token in category:
             score += 4
@@ -157,11 +220,13 @@ def _score(resource: dict[str, Any], query: str) -> float:
         elif token in haystack:
             score += 1
 
-    # Favor concise resources with multiple query-term hits without making price
-    # affect semantic relevance.
     unique_hits = sum(1 for token in set(q_tokens) if token in haystack)
     score += min(unique_hits, 5) * 1.5
     return score
+
+
+def _redacted_metadata(resource: dict[str, Any]) -> dict[str, Any]:
+    return {key: value for key, value in resource.items() if not _SECRET_KEY_RE.search(str(key))}
 
 
 def summarize_resource(resource: dict[str, Any], public_origin: str) -> dict[str, Any]:
@@ -175,8 +240,9 @@ def summarize_resource(resource: dict[str, Any], public_origin: str) -> dict[str
         "price_usd": price,
         "free": _is_free(resource),
         "url": _resource_url(resource, public_origin),
-        "execution_tool": "pay",
+        "execution_tool": _execution_tool(resource),
         "execution_args": {"slug": slug} if slug else None,
+        "fallback_execution_tool": "pay",
     }
 
 
@@ -203,8 +269,9 @@ def search_marketplace(
             continue
 
         price = _price_usd(resource)
-        if max_price_usd is not None and price is not None and price > float(max_price_usd):
-            continue
+        if max_price_usd is not None:
+            if price is None or price > float(max_price_usd):
+                continue
 
         if category_norm and category_norm not in _category(resource).lower():
             continue
@@ -256,11 +323,7 @@ def marketplace_details(
     for resource in resources or []:
         if isinstance(resource, dict) and _slug(resource) == wanted:
             result = summarize_resource(resource, public_origin)
-            result["metadata"] = {
-                key: value
-                for key, value in resource.items()
-                if key not in {"secrets", "token", "api_key", "private_key"}
-            }
+            result["metadata"] = _redacted_metadata(resource)
             return {"ok": True, "resource": result}
 
     return {
