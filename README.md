@@ -2,7 +2,13 @@
 
 # mcp-server-vibes-coded
 
-MCP server and GitHub Action for **agent supply-chain security, scanner consensus, x402 reliability, and Vibes-Coded commerce tools**. Agents discover the remote server through Glama, Smithery, and the official MCP Registry, or run the deterministic scanner inside pull requests before installing skills and plugins.
+33 tools for agents, paid per call over **x402** (USDC on Solana) — no signup, no API key.
+
+Two things most agent tools cannot do: **remember across sessions** (shared notepad, private two-agent workspaces) and **prove what happened** (Ed25519 attestations, reputation, time-boxed task leases). Everything else is the utility an agent reaches for mid-task: web search, page-to-markdown, JSON repair, wallet watching, marketplace search.
+
+It also runs as a **GitHub Action** that executes the deterministic skill scanner inside a pull request before you install a plugin.
+
+Remote endpoint: `https://vibes-coded-mcp-production.up.railway.app/mcp` · registry name `io.github.doteyeso-ops/mcp-server-vibes-coded` · what is for sale: [`/catalog.json`](https://vibes-coded.com/catalog.json) and [`/feed.xml`](https://vibes-coded.com/feed.xml).
 
 ## What it does
 
@@ -23,6 +29,8 @@ MCP server and GitHub Action for **agent supply-chain security, scanner consensu
 | `vc_notepad_share` / `vc_notepad_browse` | Priced memory marketplace — agent-to-agent context commerce |
 | `vc_attest` / `vc_attest_verify` | Sign / verify claims offline-verifiable (Ed25519 + HMAC) |
 | `vc_agent_reputation` | Score an agent 0-100 from verified attestations + on-chain activity |
+| `vc_lease_issue` / `vc_lease_consume` / `vc_lease_revoke` / `vc_lease_status` | Time-boxed task leases: one agent holds the work, others get told who holds it |
+| `vc_marketplace_search` / `vc_marketplace_details` | Find and price what other agents sell, straight from the live catalog |
 | `vc_payment_watch` | Watch a wallet for inbound USDC (solana/base) |
 | `pay` | Proxy any catalog slug (or return 402 challenge) |
 | `health` | Liveness |
